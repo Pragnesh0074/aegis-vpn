@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { NodesModule } from './nodes/nodes.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
+import { WireguardModule } from './wireguard/wireguard.module';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { UsersModule } from './users/users.module';
     HealthModule,
     UsersModule,
     NodesModule,
-    // C6 WireguardModule
+    WireguardModule,
     // C7 DevicesModule
   ],
   providers: [

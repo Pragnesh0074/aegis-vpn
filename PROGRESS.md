@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C5 complete)
+**Last updated:** 2026-09-09 (C0-C6 complete)
 
 ---
 
@@ -19,7 +19,7 @@
 | C3 | Auth | ✅ done |
 | C4 | Users | ✅ done |
 | C5 | Nodes | ✅ done |
-| C6 | WireGuard core | ⬜ not started |
+| C6 | WireGuard core | ✅ done |
 | C7 | Devices | ⬜ not started |
 | C8 | Hardening | ⬜ not started |
 | C9 | Ops / deploy | ⬜ not started |
@@ -29,23 +29,36 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C6 — WireGuard core** (the risky one; depends only on C2, no HTTP involved)
+**C7 — Devices** (the payoff chunk: ties C5 + C6 together behind HTTP)
 
-Build in `backend/src/wireguard/`:
-- `WgRunner` interface (the port) with two implementations selected by `WG_RUNNER`:
-  - `ExecWgRunner` — real `wg` via `execFile` (argv array, **never** `exec`/shell)
-  - `FakeWgRunner` — in-memory map, for macOS dev
-- `WireguardService`: `addPeer`, `removePeer`, `listPeers`, `reconcile()`
-- `IpAllocatorService`: derive the host range from `Node.subnetV4`, skip `.1`
-  (the server) and the broadcast address, honour `Node.maxPeers`
-- Boot reconciliation via `OnApplicationBootstrap` when `WG_RECONCILE_ON_BOOT=true`:
-  Postgres is the source of truth, `wg0` is rebuilt from it
+Build in `backend/src/devices/`:
+- `POST /devices` — body `{ publicKey, name, platform, nodeId? }`
+  1. `UsersService.hasDeviceCapacity(userId)` -> 409 if the cap is hit
+  2. node = `nodeId ? findActiveOrThrow : selectLeastLoaded()`
+  3. **allocate + insert with retry**: `WireguardService.allocateIp(node)` then
+     `device.create`. On Prisma `P2002` (the `@@unique([nodeId, tunnelIpV4])`
+     constraint firing on a concurrent insert) re-allocate and retry, max ~5 times.
+     The allocator is advisory — this retry loop is what actually makes it safe.
+  4. `WireguardService.applyPeer(device, node)`
+  5. **If applyPeer throws, delete the row** so the database cannot claim an address
+     the interface does not have.
+  6. return the client config (see below)
+- `GET /devices` — the user's active devices (never the tunnel topology of others)
+- `DELETE /devices/:id` — verify ownership, `revokePeer`, set `revokedAt`
+  (soft delete: do NOT free the IP immediately)
+- Also reject a `publicKey` already registered (unique constraint -> 409)
 
-Validate hard: `publicKey` must match `/^[A-Za-z0-9+/]{43}=$/` and the tunnel IP must
-be inside the node's subnet, checked **before** either reaches an argv array.
+`POST /devices` response shape — everything the client needs except the private key:
+```json
+{ "deviceId": "...", "tunnelIp": "10.7.0.7/32", "dns": "10.7.0.1", "mtu": 1420,
+  "peer": { "publicKey": "<node.publicKey>", "endpoint": "vpn.example.com:51820",
+            "allowedIps": "0.0.0.0/0, ::/0", "persistentKeepalive": 25 } }
+```
+`persistentKeepalive: 25` is mandatory for mobile — carrier NAT drops idle tunnels
+after ~30-60s and reconnects look broken without it.
 
-Verify with `npm run build` plus a `FakeWgRunner` exercise of allocation and
-reconciliation, then update this file and commit `chore(C6): wireguard core`.
+Verify with `npm run build` plus a `FakeWgRunner` exercise of the P2002 retry path and
+the applyPeer-failure rollback, then update this file and commit `chore(C7): devices`.
 
 ---
 
@@ -77,6 +90,14 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | `GET /nodes` omits `publicKey`, `subnetV4` and `dns` | Those only matter alongside an issued peer (returned by `POST /devices`); no reason to expose the fleet's tunnel topology to every account |
 | 2026-09-09 | Device cap counts only `revokedAt: null` devices | Otherwise removing and re-adding a phone would permanently consume a slot |
 | 2026-09-09 | `selectLeastLoaded()` is advisory; C6's allocator is the real capacity guard | The read can go stale between selection and insert; only the unique constraint is authoritative |
+| 2026-09-09 | `WgRunner` port with `ExecWgRunner` / `FakeWgRunner` bound by `WG_RUNNER` | Lets the whole control plane be built and tested on macOS, which has no `wg` and no kernel module |
+| 2026-09-09 | Peers get `allowed-ips` of **exactly `/32`** | A wider mask would let one client source-spoof another client's tunnel IP |
+| 2026-09-09 | `reconcile()` re-applies a peer whose `allowed-ips` **drifted**, not just missing peers | A peer present with the wrong address routes another client's traffic |
+| 2026-09-09 | `wg show <if> dump`: the **first line is the interface**, not a peer | Treating it as a peer invents a phantom peer on every reconcile and would get "removed" each time |
+| 2026-09-09 | `ipToInt` uses `>>> 0` | Without it, any address with a leading octet >= 128 goes negative and range comparisons break |
+| 2026-09-09 | `wg-quick save` failure is logged, not fatal | The peer is already live in the kernel and Postgres remains authoritative; failing the request would be worse |
+| 2026-09-09 | Boot reconciliation failure does **not** abort startup | Existing peers keep working; the API should still serve |
+| 2026-09-09 | Revoked devices keep occupying their tunnel IP | Recycling immediately would let a new device inherit traffic aimed at a stale client that has not noticed its peer is gone |
 
 ---
 
@@ -97,6 +118,12 @@ Append here as decisions are made, so a later session does not re-litigate them.
   is already a dependency; it is just not wired up.
 - Auth was verified by unit-level checks and `npm run build`, not against a live
   database — same Docker gap as C1/C2.
+- **`ExecWgRunner` has never been run against a real `wg` binary.** Its logic is
+  verified (33 checks incl. the dump parser, via a stubbed exec), but the sudoers rule,
+  binary paths and actual `wg set` behaviour are unproven until C9 deploys to the
+  Oracle box. Expect to debug permissions there, not logic.
+- No `updateLastSeen` yet: `Device.lastSeenAt` is never written. Wire it to
+  `wg show dump` handshake timestamps in a later chunk (useful for "device inactive").
 
 ---
 
