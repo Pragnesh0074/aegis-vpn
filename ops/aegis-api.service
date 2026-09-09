@@ -1,0 +1,49 @@
+# Aegis VPN control-plane API.
+#
+# Install:
+#   sudo cp ops/aegis-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aegis-api
+#
+[Unit]
+Description=Aegis VPN API
+Documentation=file:///opt/aegis-vpn/docs/DEPLOY.md
+After=network-online.target postgresql.service wg-quick@wg0.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=vpnapi
+Group=vpnapi
+WorkingDirectory=/opt/aegis-vpn/backend
+EnvironmentFile=/etc/aegis/api.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aegis-api
+
+# ── Sandboxing ──────────────────────────────────────────────────────────────────
+# This service escalates to root via sudo to run `wg set` / `wg-quick save`, which
+# constrains what can be locked down here:
+#
+#   NoNewPrivileges=yes   BREAKS sudo outright — setuid is exactly what it forbids.
+#   ProtectSystem=strict  makes /etc read-only for the whole unit, including sudo
+#                         children (they inherit the mount namespace), so
+#                         `wg-quick save` fails when it rewrites wg0.conf.
+#
+# Both are therefore deliberately absent. The compensating control is the sudoers
+# rule in /etc/sudoers.d/aegis-vpnapi, which permits only three commands on one
+# interface. Do not "harden" this by adding those directives — it will silently
+# break peer creation, and the API will return 500 on every POST /devices.
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=no
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

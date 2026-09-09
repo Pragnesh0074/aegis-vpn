@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C8 complete — API feature-complete and hardened)
+**Last updated:** 2026-09-09 (C0-C9 complete — deployable; only C10 tests remain)
 
 ---
 
@@ -22,49 +22,45 @@
 | C6 | WireGuard core | ✅ done |
 | C7 | Devices | ✅ done |
 | C8 | Hardening | ✅ done |
-| C9 | Ops / deploy | ⬜ not started |
+| C9 | Ops / deploy | ✅ done |
 | C10 | Tests | ⬜ not started |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C9 — Ops / deploy** (where `ExecWgRunner` finally meets a real `wg` binary)
+**C10 — Tests** (the last backend chunk)
 
-Create `docs/DEPLOY.md` plus scripts in `ops/`:
+Every chunk from C3 onward was verified with a throwaway script that was deleted after
+it passed. C10 promotes those into the repo so they run in CI and catch regressions.
 
-- **`ops/provision.sh`** — idempotent, run as root on a fresh Oracle Ampere box:
-  - detect the NIC (`ip -br link`; OCI ARM is usually `enp0s6`) and substitute it into
-    the nftables rules — do not hardcode `eth0`
-  - **Oracle's double firewall**: opening the VCN Security List is not enough, the
-    Ubuntu image's own iptables drops everything. Must add
-    `iptables -I INPUT -p udp --dport 51820 -j ACCEPT` (and 443) then
-    `netfilter-persistent save`. This is the single most common "OCI WireGuard
-    silently does not work" cause.
-  - `net.ipv4.ip_forward=1`, server keypair, `wg0.conf` (Address `10.7.0.1/24` +
-    `fd42:7::1/64`, MTU 1420 — OCI's internet MTU is 1500 so no GCP-style reduction)
-  - the nftables `vpn` table from README.md: drop `169.254.0.0/16` (OCI metadata —
-    otherwise a user can steal instance credentials), drop RFC1918 destinations,
-    drop SMTP, then masquerade
-  - Unbound on `10.7.0.1` with `ip-freebind: yes` (it must bind before wg0 exists)
-  - `vpnapi` service user + the narrow sudoers rule for `wg`/`wg-quick` only
-  - Postgres 16, database + role
-- **`ops/add-peer.sh`** — manual peer for testing the tunnel *before* the API is
-  involved; prints a client config and a QR code
-- **`ops/aegis-api.service`** — systemd unit running as `vpnapi`, `WG_RUNNER=exec`
-- **`ops/Caddyfile`** — `reverse_proxy localhost:3000`, auto-TLS
-- **`docs/DEPLOY.md`** — runbook: OCI instance creation (VM.Standard.A1.Flex, 2 OCPU /
-  12 GB, Ubuntu 24.04, reserved public IP), Security List ingress
-  (UDP 51820, TCP 443, SSH from one IP), `TRUST_PROXY=true`, `npm run prisma:deploy`,
-  seed with `cat /etc/wireguard/server.pub`, and the verification checklist
-  (**test from mobile data, not Wi-Fi** — consumer routers rarely hairpin NAT)
+Write real spec files under `backend/src/` (jest is already configured in
+`package.json`, `rootDir: src`, pattern `*.spec.ts`):
 
-Then **C10 — Tests**: promote the throwaway harnesses used in C3/C6/C7/C8 into real
-`*.spec.ts` files plus a `test/app.e2e-spec.ts`. The C8 harness (Nest booted with an
-overridden `PrismaService` + supertest) is the template for the e2e file.
+- `config/env.validation.spec.ts` — 10 cases: secret length, identical secrets,
+  `WG_RUNNER=fake` rejected in production, placeholder detection, interface-name
+  injection, and `WG_RECONCILE_ON_BOOT='false'` resolving to `false` (not coerced true)
+- `auth/duration.spec.ts` — 8 cases, valid and rejected
+- `auth/password.service.spec.ts` — round-trip plus the constant-time check
+  (`verifyMaybe(null, …)` must cost comparable work to a real verify)
+- `wireguard/wg-validation.spec.ts` — subnet edges (`.2` first, broadcast excluded,
+  `/31` rejected), unsigned `ipToInt` for octets >= 128, key rejection incl. shell
+  metacharacters
+- `wireguard/ip-allocator.service.spec.ts` — gap reuse, `maxPeers`, malformed rows
+- `wireguard/wireguard.service.spec.ts` — reconcile add/remove/**drift**/idempotency,
+  and the `wg show dump` parser skipping the interface line
+- `devices/devices.service.spec.ts` — P2002 retry vs non-retryable `publicKey`
+  conflict, bounded exhaustion, `applyPeer` rollback, cap, ownership 404
+- `test/app.e2e-spec.ts` — the C8 harness: `Test.createTestingModule` with
+  `.overrideProvider(PrismaService)` + supertest. Covers default-deny auth, the 5/min
+  login throttle, guard ordering (flood yields 429 not 401), validation pipe, and
+  request-id handling. `test/jest-e2e.json` still needs creating.
 
-Verify with `npm run build` and `bash -n ops/*.sh`, then update this file and commit
-`chore(C9): ops and deploy`.
+Target: `npm test` and `npm run test:e2e` both green. Roughly 90 assertions, all of
+which have already been shown to pass as throwaway scripts — this is transcription,
+not new discovery.
+
+After C10 the backend is done. Flutter starts a new chunk series (F0-Fn).
 
 ---
 
@@ -117,6 +113,13 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | Request logging records method/path/status/duration/id — **never bodies or headers** | Auth bodies carry passwords; an endpoint that logs its own payload puts credentials into log aggregation |
 | 2026-09-09 | Token pruning deletes only **expired** rows, keeps revoked-but-unexpired ones | Revoked rows are what make reuse detection work — deleting them would turn a replayed stolen token into a plain "not found" instead of a family-wide revocation |
 | 2026-09-09 | Pruning runs opportunistically on login and can never fail it | Avoids adding a scheduler for one bounded indexed delete; housekeeping must not break authentication |
+| 2026-09-09 | `provision.sh` never overwrites `wg0.conf` or `server.key` | Regenerating the server key invalidates every issued peer; overwriting the conf drops saved `[Peer]` blocks |
+| 2026-09-09 | nftables table written to `/etc/nftables.d/aegis-vpn.nft` and `include`d | Appending to `nftables.conf` would stack a duplicate table on every re-run |
+| 2026-09-09 | NIC detected from the default route, never hardcoded | OCI ARM is `enp0s6`, AWS `ens5`, GCP `ens4`; a wrong `oifname` means handshake succeeds but no traffic flows |
+| 2026-09-09 | iptables rules added with a `-C` guard | `-I` alone stacks duplicates on every provision run |
+| 2026-09-09 | systemd unit **omits** `NoNewPrivileges` and `ProtectSystem=strict` | Both break the sudo escalation the API needs for `wg` — `NoNewPrivileges` forbids setuid outright, and `ProtectSystem=strict` makes `/etc` read-only for sudo children, so `wg-quick save` fails. The sudoers allowlist is the compensating control |
+| 2026-09-09 | `add-peer.sh` avoids `mapfile` | `mapfile` is bash 4+; if unavailable the used-address array is empty and the script hands out `.2` on top of a live peer. A string + `grep -qxF` cannot fail open |
+| 2026-09-09 | `/etc/aegis/api.env` is mode `640 root:vpnapi` | Holds the database password and both JWT secrets |
 
 ---
 
@@ -138,10 +141,15 @@ Append here as decisions are made, so a later session does not re-litigate them.
   `PrismaService` and drove it over HTTP, so module wiring, guards, pipes, the filter
   and the throttler are all verified. What remains untested is only the real database
   layer: migrations, actual queries, and the seed.
-- **`ExecWgRunner` has never been run against a real `wg` binary.** Its logic is
-  verified (33 checks incl. the dump parser, via a stubbed exec), but the sudoers rule,
-  binary paths and actual `wg set` behaviour are unproven until C9 deploys to the
-  Oracle box. Expect to debug permissions there, not logic.
+- **`ExecWgRunner` has still never run against a real `wg` binary.** C9 wrote the
+  provisioning and the sudoers rule, but nothing has been executed on an actual Oracle
+  instance. The scripts pass `bash -n` and the address-selection logic is unit-tested,
+  but package installs, `netfilter-persistent`, the Postgres role setup and the sudo
+  escalation are all unverified. First real deploy will surface issues — expect
+  permissions and paths, not logic.
+- `provision.sh` was not executed anywhere (it needs root on Ubuntu). Syntax checked
+  only. `shellcheck` is not installed on the dev machine; worth running once before
+  the first deploy.
 - No `updateLastSeen` yet: `Device.lastSeenAt` is never written. Wire it to
   `wg show dump` handshake timestamps in a later chunk (useful for "device inactive").
 

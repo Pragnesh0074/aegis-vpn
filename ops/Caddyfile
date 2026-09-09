@@ -1,0 +1,36 @@
+# Aegis VPN — TLS termination for the API.
+#
+# Install:
+#   sudo cp ops/Caddyfile /etc/caddy/Caddyfile
+#   sudo sed -i 's/vpn.example.com/your.real.domain/' /etc/caddy/Caddyfile
+#   sudo systemctl reload caddy
+#
+# Caddy obtains and renews the certificate automatically. It needs TCP 80 and 443
+# open in BOTH the OCI Security List and the host iptables (provision.sh does the
+# iptables half).
+
+vpn.example.com {
+	encode zstd gzip
+
+	# The API sets its own security headers via helmet; these cover what a proxy
+	# is better placed to assert.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	reverse_proxy localhost:3000 {
+		# Caddy sets X-Forwarded-For itself. The API only honours it when
+		# TRUST_PROXY=true, which the deployment sets — without that, the rate
+		# limiter keys every request to Caddy's own IP and throttles all users
+		# as if they were one client.
+		health_uri /health
+		health_interval 30s
+	}
+
+	log {
+		output file /var/log/caddy/aegis-api.log
+		format json
+	}
+}
