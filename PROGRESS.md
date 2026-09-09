@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C3 complete)
+**Last updated:** 2026-09-09 (C0-C5 complete)
 
 ---
 
@@ -17,8 +17,8 @@
 | C1 | Core app | ✅ done |
 | C2 | Database | ✅ done |
 | C3 | Auth | ✅ done |
-| C4 | Users | ⬜ not started |
-| C5 | Nodes | ⬜ not started |
+| C4 | Users | ✅ done |
+| C5 | Nodes | ✅ done |
 | C6 | WireGuard core | ⬜ not started |
 | C7 | Devices | ⬜ not started |
 | C8 | Hardening | ⬜ not started |
@@ -29,20 +29,23 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C4 — Users**
+**C6 — WireGuard core** (the risky one; depends only on C2, no HTTP involved)
 
-Build in `backend/src/users/`:
-- `UsersService` with `findById`, and an `activeDeviceCount(userId)` aggregation
-  (`devices` where `revokedAt: null`) that C7 will reuse for the device cap
-- `GET /users/me` -> `{ id, email, createdAt, deviceCount, maxDevices }`
-  (`maxDevices` comes from `AppConfig.maxDevicesPerUser`)
-- Route is authenticated by default; use `@CurrentUser()` to get `{ userId, email }`
-- Export `UsersService` so `DevicesModule` (C7) can inject it
+Build in `backend/src/wireguard/`:
+- `WgRunner` interface (the port) with two implementations selected by `WG_RUNNER`:
+  - `ExecWgRunner` — real `wg` via `execFile` (argv array, **never** `exec`/shell)
+  - `FakeWgRunner` — in-memory map, for macOS dev
+- `WireguardService`: `addPeer`, `removePeer`, `listPeers`, `reconcile()`
+- `IpAllocatorService`: derive the host range from `Node.subnetV4`, skip `.1`
+  (the server) and the broadcast address, honour `Node.maxPeers`
+- Boot reconciliation via `OnApplicationBootstrap` when `WG_RECONCILE_ON_BOOT=true`:
+  Postgres is the source of truth, `wg0` is rebuilt from it
 
-Small chunk. Then C5 (Nodes), then C6 (WireGuard core) — C6 is the risky one and
-depends only on C2, so it can be built and tested without touching HTTP.
+Validate hard: `publicKey` must match `/^[A-Za-z0-9+/]{43}=$/` and the tunnel IP must
+be inside the node's subnet, checked **before** either reaches an argv array.
 
-Verify with `npm run build`, then update this file and commit `chore(C4): users`.
+Verify with `npm run build` plus a `FakeWgRunner` exercise of allocation and
+reconciliation, then update this file and commit `chore(C6): wireguard core`.
 
 ---
 
@@ -71,6 +74,9 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | Dummy-hash for constant-time login is **generated at boot**, not hardcoded | A malformed hash literal makes argon2 throw instantly, which returns false fast and reinstates the enumeration oracle it was meant to close |
 | 2026-09-09 | Emails normalised to lowercase before storage/lookup | Otherwise `A@b.com` and `a@b.com` become two accounts |
 | 2026-09-09 | `JwtStrategy.validate` does one indexed user lookup per request | A deleted account must not keep operating on a still-valid 15-minute access token |
+| 2026-09-09 | `GET /nodes` omits `publicKey`, `subnetV4` and `dns` | Those only matter alongside an issued peer (returned by `POST /devices`); no reason to expose the fleet's tunnel topology to every account |
+| 2026-09-09 | Device cap counts only `revokedAt: null` devices | Otherwise removing and re-adding a phone would permanently consume a slot |
+| 2026-09-09 | `selectLeastLoaded()` is advisory; C6's allocator is the real capacity guard | The read can go stale between selection and insert; only the unique constraint is authoritative |
 
 ---
 
@@ -81,8 +87,8 @@ Append here as decisions are made, so a later session does not re-litigate them.
   `/health`, migrations and the seed are untested against a live database. Install Docker
   Desktop (or Postgres.app) and run `docker compose up -d && npm run prisma:deploy && npm run seed`.
 - `AllExceptionsFilter` maps Prisma `P2002/P2025/P2003`. Extend if new codes show up.
-- C6 must add a `wg0` **capacity check** against `Node.maxPeers` — the schema field exists
-  but nothing reads it yet.
+- `Node.maxPeers` is now read by `NodesService` for load and selection, but C6's
+  allocator must enforce it too — selection is advisory and can race.
 - **No refresh-token pruning yet.** `refresh_tokens` grows unbounded: every login and
   every rotation inserts a row and nothing deletes expired ones. Add a cleanup in C8
   (a scheduled job, or opportunistic deletion of rows past `expiresAt` on login).

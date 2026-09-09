@@ -4,7 +4,9 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
+import { NodesModule } from './nodes/nodes.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -12,8 +14,8 @@ import { PrismaModule } from './prisma/prisma.module';
     PrismaModule,
     AuthModule,
     HealthModule,
-    // C4 UsersModule
-    // C5 NodesModule
+    UsersModule,
+    NodesModule,
     // C6 WireguardModule
     // C7 DevicesModule
   ],
