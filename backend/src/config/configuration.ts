@@ -32,6 +32,10 @@ export class AppConfig {
       .filter(Boolean);
   }
 
+  get trustProxy() {
+    return this.get('TRUST_PROXY');
+  }
+
   get accessSecret() {
     return this.get('JWT_ACCESS_SECRET');
   }

@@ -21,6 +21,15 @@ export const envSchema = z
     PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     CORS_ORIGINS: z.string().default(''),
 
+    // Whether to honour X-Forwarded-For when identifying the client IP.
+    // Both settings are wrong in the other's situation:
+    //   false behind a proxy -> every request keys to the proxy's IP, so the rate
+    //     limiter treats the entire user base as one client
+    //   true with no proxy  -> a client can forge X-Forwarded-For and bypass the
+    //     rate limit entirely
+    // Defaults to false; the deploy sets it to true because Caddy sits in front.
+    TRUST_PROXY: boolFromString(false),
+
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
     JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be >= 32 chars'),

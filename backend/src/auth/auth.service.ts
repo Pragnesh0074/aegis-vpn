@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { TokenPair } from './auth.types';
@@ -9,6 +9,8 @@ import { TokenService } from './token.service';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
@@ -57,6 +59,15 @@ export class AuthService {
     if (!user || !valid) {
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    // Opportunistic cleanup so refresh_tokens does not grow forever. Never allowed
+    // to fail a login — this is housekeeping, not part of authenticating.
+    await this.tokens.pruneExpired(user.id).catch((error: unknown) => {
+      this.logger.warn(
+        `Pruning expired refresh tokens failed for user ${user.id}: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 
     return this.tokens.issuePair(user.id, user.email);
   }

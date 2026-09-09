@@ -141,6 +141,24 @@ export class TokenService {
     });
   }
 
+  /**
+   * Deletes this user's expired refresh tokens.
+   *
+   * Every login and every rotation inserts a row, so the table grows without bound.
+   * Doing this opportunistically on login avoids adding a scheduler for one query;
+   * it is a bounded, indexed delete scoped to a single user.
+   *
+   * Revoked-but-unexpired rows are kept on purpose: they are what makes reuse
+   * detection work. Deleting them would turn a replayed stolen token into a plain
+   * "not found" instead of triggering a family-wide revocation.
+   */
+  async pruneExpired(userId: string): Promise<number> {
+    const { count } = await this.prisma.refreshToken.deleteMany({
+      where: { userId, expiresAt: { lt: new Date() } },
+    });
+    return count;
+  }
+
   async revokeAllForUser(userId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { userId, revokedAt: null },

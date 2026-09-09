@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C7 complete — the API is feature-complete)
+**Last updated:** 2026-09-09 (C0-C8 complete — API feature-complete and hardened)
 
 ---
 
@@ -21,7 +21,7 @@
 | C5 | Nodes | ✅ done |
 | C6 | WireGuard core | ✅ done |
 | C7 | Devices | ✅ done |
-| C8 | Hardening | ⬜ not started |
+| C8 | Hardening | ✅ done |
 | C9 | Ops / deploy | ⬜ not started |
 | C10 | Tests | ⬜ not started |
 
@@ -29,31 +29,42 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C8 — Hardening**
+**C9 — Ops / deploy** (where `ExecWgRunner` finally meets a real `wg` binary)
 
-The API is feature-complete after C7; C8 closes the two gaps in the follow-ups list.
+Create `docs/DEPLOY.md` plus scripts in `ops/`:
 
-Build in `backend/src/`:
-- **`@nestjs/throttler`** (already a dependency, not yet wired). Register
-  `ThrottlerModule` globally, then tighten the auth routes specifically —
-  `/auth/login` and `/auth/register` are currently open to credential stuffing.
-  Roughly 5 requests / 60s per IP on those two, a looser default elsewhere.
-  Note: behind Caddy the client IP arrives in `X-Forwarded-For`, so set
-  `app.set('trust proxy', 1)` or throttling will key every request to Caddy's IP
-  and rate-limit all users as one.
-- **Refresh-token pruning.** `refresh_tokens` grows unbounded. Simplest fix that
-  needs no scheduler: opportunistically `deleteMany` rows past `expiresAt` for that
-  user on each successful login.
-- **Request-id + structured logging.** A middleware that attaches a request id and
-  logs method/path/status/duration, so a peer-issuance failure can be traced.
-- Confirm `helmet` and the global `ValidationPipe` are still correctly applied (they
-  are wired in C1's `main.ts`).
+- **`ops/provision.sh`** — idempotent, run as root on a fresh Oracle Ampere box:
+  - detect the NIC (`ip -br link`; OCI ARM is usually `enp0s6`) and substitute it into
+    the nftables rules — do not hardcode `eth0`
+  - **Oracle's double firewall**: opening the VCN Security List is not enough, the
+    Ubuntu image's own iptables drops everything. Must add
+    `iptables -I INPUT -p udp --dport 51820 -j ACCEPT` (and 443) then
+    `netfilter-persistent save`. This is the single most common "OCI WireGuard
+    silently does not work" cause.
+  - `net.ipv4.ip_forward=1`, server keypair, `wg0.conf` (Address `10.7.0.1/24` +
+    `fd42:7::1/64`, MTU 1420 — OCI's internet MTU is 1500 so no GCP-style reduction)
+  - the nftables `vpn` table from README.md: drop `169.254.0.0/16` (OCI metadata —
+    otherwise a user can steal instance credentials), drop RFC1918 destinations,
+    drop SMTP, then masquerade
+  - Unbound on `10.7.0.1` with `ip-freebind: yes` (it must bind before wg0 exists)
+  - `vpnapi` service user + the narrow sudoers rule for `wg`/`wg-quick` only
+  - Postgres 16, database + role
+- **`ops/add-peer.sh`** — manual peer for testing the tunnel *before* the API is
+  involved; prints a client config and a QR code
+- **`ops/aegis-api.service`** — systemd unit running as `vpnapi`, `WG_RUNNER=exec`
+- **`ops/Caddyfile`** — `reverse_proxy localhost:3000`, auto-TLS
+- **`docs/DEPLOY.md`** — runbook: OCI instance creation (VM.Standard.A1.Flex, 2 OCPU /
+  12 GB, Ubuntu 24.04, reserved public IP), Security List ingress
+  (UDP 51820, TCP 443, SSH from one IP), `TRUST_PROXY=true`, `npm run prisma:deploy`,
+  seed with `cat /etc/wireguard/server.pub`, and the verification checklist
+  (**test from mobile data, not Wi-Fi** — consumer routers rarely hairpin NAT)
 
-Verify with `npm run build`, then update this file and commit `chore(C8): hardening`.
+Then **C10 — Tests**: promote the throwaway harnesses used in C3/C6/C7/C8 into real
+`*.spec.ts` files plus a `test/app.e2e-spec.ts`. The C8 harness (Nest booted with an
+overridden `PrismaService` + supertest) is the template for the e2e file.
 
-Remaining after that: **C9 (ops/deploy — provision.sh, add-peer.sh, systemd,
-Caddyfile)** and **C10 (tests)**. C9 is where `ExecWgRunner` finally meets a real
-`wg` binary; expect to debug sudoers and paths there, not logic.
+Verify with `npm run build` and `bash -n ops/*.sh`, then update this file and commit
+`chore(C9): ops and deploy`.
 
 ---
 
@@ -99,6 +110,13 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | Revoke marks the database **before** removing the peer | `reconcile()` converges the interface onto the database, so a crash between the two steps self-heals in the safe direction. The reverse order would let reconciliation recreate a peer the user believes is gone |
 | 2026-09-09 | Another user's device returns **404, not 403** | A 403 confirms the id exists; scoping the lookup by `userId` makes it indistinguishable from a nonexistent device |
 | 2026-09-09 | Issued configs use `allowedIps = "0.0.0.0/0, ::/0"` | Full tunnel. Including `::/0` routes IPv6 into a tunnel the server does not forward, blackholing it rather than leaking the real address |
+| 2026-09-09 | `ThrottlerGuard` registered **before** `JwtAuthGuard` | Global guards run in registration order; otherwise every throttled login attempt would still pay for an argon2 verification |
+| 2026-09-09 | **One** named throttler (`default`), overridden per route with `@Throttle()` | A second named throttler applies BOTH limits to every route, which is almost never intended |
+| 2026-09-09 | New `TRUST_PROXY` env var, default `false`, `true` in deployment | `false` behind Caddy collapses every user onto Caddy's IP and throttles them as one; `true` with no proxy lets a client forge `X-Forwarded-For` and bypass throttling entirely |
+| 2026-09-09 | `/health` is `@SkipThrottle()` | Monitoring polls it; throttling would produce false alarms |
+| 2026-09-09 | Request logging records method/path/status/duration/id — **never bodies or headers** | Auth bodies carry passwords; an endpoint that logs its own payload puts credentials into log aggregation |
+| 2026-09-09 | Token pruning deletes only **expired** rows, keeps revoked-but-unexpired ones | Revoked rows are what make reuse detection work — deleting them would turn a replayed stolen token into a plain "not found" instead of a family-wide revocation |
+| 2026-09-09 | Pruning runs opportunistically on login and can never fail it | Avoids adding a scheduler for one bounded indexed delete; housekeeping must not break authentication |
 
 ---
 
@@ -111,14 +129,15 @@ Append here as decisions are made, so a later session does not re-litigate them.
 - `AllExceptionsFilter` maps Prisma `P2002/P2025/P2003`. Extend if new codes show up.
 - `Node.maxPeers` is now read by `NodesService` for load and selection, but C6's
   allocator must enforce it too — selection is advisory and can race.
-- **No refresh-token pruning yet.** `refresh_tokens` grows unbounded: every login and
-  every rotation inserts a row and nothing deletes expired ones. Add a cleanup in C8
-  (a scheduled job, or opportunistic deletion of rows past `expiresAt` on login).
-- **Auth endpoints are not rate limited yet.** `POST /auth/login` and `/auth/register`
-  are open to credential stuffing until C8 adds `@nestjs/throttler`. `@nestjs/throttler`
-  is already a dependency; it is just not wired up.
-- Auth was verified by unit-level checks and `npm run build`, not against a live
-  database — same Docker gap as C1/C2.
+- ~~No refresh-token pruning~~ — done in C8 (opportunistic on login).
+- ~~Auth endpoints are not rate limited~~ — done in C8 (5/min on login+register).
+- **Throttler uses in-memory storage.** Fine for one instance; a second API instance
+  would each keep their own counters. Swap to the Redis storage provider if the API is
+  ever horizontally scaled.
+- **The app now boots.** C8's harness started the full Nest DI graph with an overridden
+  `PrismaService` and drove it over HTTP, so module wiring, guards, pipes, the filter
+  and the throttler are all verified. What remains untested is only the real database
+  layer: migrations, actual queries, and the seed.
 - **`ExecWgRunner` has never been run against a real `wg` binary.** Its logic is
   verified (33 checks incl. the dump parser, via a stubbed exec), but the sudoers rule,
   binary paths and actual `wg set` behaviour are unproven until C9 deploys to the
