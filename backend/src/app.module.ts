@@ -3,6 +3,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AppConfigModule } from './config/config.module';
+import { DevicesModule } from './devices/devices.module';
 import { HealthModule } from './health/health.module';
 import { NodesModule } from './nodes/nodes.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -18,7 +19,7 @@ import { WireguardModule } from './wireguard/wireguard.module';
     UsersModule,
     NodesModule,
     WireguardModule,
-    // C7 DevicesModule
+    DevicesModule,
   ],
   providers: [
     // Authentication is on by default for every route. Opt out with @Public().

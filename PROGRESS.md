@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C6 complete)
+**Last updated:** 2026-09-09 (C0-C7 complete — the API is feature-complete)
 
 ---
 
@@ -20,7 +20,7 @@
 | C4 | Users | ✅ done |
 | C5 | Nodes | ✅ done |
 | C6 | WireGuard core | ✅ done |
-| C7 | Devices | ⬜ not started |
+| C7 | Devices | ✅ done |
 | C8 | Hardening | ⬜ not started |
 | C9 | Ops / deploy | ⬜ not started |
 | C10 | Tests | ⬜ not started |
@@ -29,36 +29,31 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C7 — Devices** (the payoff chunk: ties C5 + C6 together behind HTTP)
+**C8 — Hardening**
 
-Build in `backend/src/devices/`:
-- `POST /devices` — body `{ publicKey, name, platform, nodeId? }`
-  1. `UsersService.hasDeviceCapacity(userId)` -> 409 if the cap is hit
-  2. node = `nodeId ? findActiveOrThrow : selectLeastLoaded()`
-  3. **allocate + insert with retry**: `WireguardService.allocateIp(node)` then
-     `device.create`. On Prisma `P2002` (the `@@unique([nodeId, tunnelIpV4])`
-     constraint firing on a concurrent insert) re-allocate and retry, max ~5 times.
-     The allocator is advisory — this retry loop is what actually makes it safe.
-  4. `WireguardService.applyPeer(device, node)`
-  5. **If applyPeer throws, delete the row** so the database cannot claim an address
-     the interface does not have.
-  6. return the client config (see below)
-- `GET /devices` — the user's active devices (never the tunnel topology of others)
-- `DELETE /devices/:id` — verify ownership, `revokePeer`, set `revokedAt`
-  (soft delete: do NOT free the IP immediately)
-- Also reject a `publicKey` already registered (unique constraint -> 409)
+The API is feature-complete after C7; C8 closes the two gaps in the follow-ups list.
 
-`POST /devices` response shape — everything the client needs except the private key:
-```json
-{ "deviceId": "...", "tunnelIp": "10.7.0.7/32", "dns": "10.7.0.1", "mtu": 1420,
-  "peer": { "publicKey": "<node.publicKey>", "endpoint": "vpn.example.com:51820",
-            "allowedIps": "0.0.0.0/0, ::/0", "persistentKeepalive": 25 } }
-```
-`persistentKeepalive: 25` is mandatory for mobile — carrier NAT drops idle tunnels
-after ~30-60s and reconnects look broken without it.
+Build in `backend/src/`:
+- **`@nestjs/throttler`** (already a dependency, not yet wired). Register
+  `ThrottlerModule` globally, then tighten the auth routes specifically —
+  `/auth/login` and `/auth/register` are currently open to credential stuffing.
+  Roughly 5 requests / 60s per IP on those two, a looser default elsewhere.
+  Note: behind Caddy the client IP arrives in `X-Forwarded-For`, so set
+  `app.set('trust proxy', 1)` or throttling will key every request to Caddy's IP
+  and rate-limit all users as one.
+- **Refresh-token pruning.** `refresh_tokens` grows unbounded. Simplest fix that
+  needs no scheduler: opportunistically `deleteMany` rows past `expiresAt` for that
+  user on each successful login.
+- **Request-id + structured logging.** A middleware that attaches a request id and
+  logs method/path/status/duration, so a peer-issuance failure can be traced.
+- Confirm `helmet` and the global `ValidationPipe` are still correctly applied (they
+  are wired in C1's `main.ts`).
 
-Verify with `npm run build` plus a `FakeWgRunner` exercise of the P2002 retry path and
-the applyPeer-failure rollback, then update this file and commit `chore(C7): devices`.
+Verify with `npm run build`, then update this file and commit `chore(C8): hardening`.
+
+Remaining after that: **C9 (ops/deploy — provision.sh, add-peer.sh, systemd,
+Caddyfile)** and **C10 (tests)**. C9 is where `ExecWgRunner` finally meets a real
+`wg` binary; expect to debug sudoers and paths there, not logic.
 
 ---
 
@@ -98,6 +93,12 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | `wg-quick save` failure is logged, not fatal | The peer is already live in the kernel and Postgres remains authoritative; failing the request would be worse |
 | 2026-09-09 | Boot reconciliation failure does **not** abort startup | Existing peers keep working; the API should still serve |
 | 2026-09-09 | Revoked devices keep occupying their tunnel IP | Recycling immediately would let a new device inherit traffic aimed at a stale client that has not noticed its peer is gone |
+| 2026-09-09 | P2002 retry loop distinguishes `tunnelIpV4` from `publicKey` via `error.meta.target` | An IP collision is a lost race worth retrying; a duplicate public key would collide forever, so it must 409 immediately |
+| 2026-09-09 | Retries bounded at 5, then 500 | An unbounded retry on a full node would spin |
+| 2026-09-09 | `applyPeer` failure **deletes the device row** | Otherwise the database claims a tunnel IP that `wg0` has never heard of, and the client gets a config that silently cannot connect |
+| 2026-09-09 | Revoke marks the database **before** removing the peer | `reconcile()` converges the interface onto the database, so a crash between the two steps self-heals in the safe direction. The reverse order would let reconciliation recreate a peer the user believes is gone |
+| 2026-09-09 | Another user's device returns **404, not 403** | A 403 confirms the id exists; scoping the lookup by `userId` makes it indistinguishable from a nonexistent device |
+| 2026-09-09 | Issued configs use `allowedIps = "0.0.0.0/0, ::/0"` | Full tunnel. Including `::/0` routes IPv6 into a tunnel the server does not forward, blackholing it rather than leaking the real address |
 
 ---
 
