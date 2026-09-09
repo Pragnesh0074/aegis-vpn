@@ -1,0 +1,18 @@
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+server.key
+
+.DS_Store
+*.log
+npm-debug.log*
+.idea/
+.vscode/
