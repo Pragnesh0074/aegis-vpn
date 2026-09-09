@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  devices       Device[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// Hashed refresh tokens, so a database leak does not hand out sessions.
+/// `replacedByTokenId` gives an audit trail for rotation and lets us detect reuse
+/// of an already-rotated token (a strong signal of theft).
+model RefreshToken {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  replacedByTokenId String?   @db.Uuid
+  createdAt         DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+/// A physical VPN exit node running `wg0`. One row for the MVP.
+/// `publicKey` is the SERVER's WireGuard public key — safe to hand to clients.
+/// The server's private key never appears in this database.
+model Node {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  region     String
+  publicKey  String
+  endpoint   String
+  subnetV4   String
+  dns        String
+  mtu        Int      @default(1420)
+  maxPeers   Int      @default(250)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  devices Device[]
+
+  @@map("nodes")
+}
+
+/// One WireGuard peer. `publicKey` is generated ON THE CLIENT and uploaded;
+/// the matching private key never leaves the device.
+///
+/// Revocation is a soft delete (`revokedAt`) so a tunnel IP is not recycled
+/// while a stale client might still be presenting the old key. The unique
+/// constraint on (nodeId, tunnelIpV4) is what makes concurrent IP allocation
+/// safe — the allocator relies on the database rejecting a double-assignment.
+model Device {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodeId     String    @db.Uuid
+  node       Node      @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  name       String
+  platform   String
+  publicKey  String    @unique
+  tunnelIpV4 String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime?
+  revokedAt  DateTime?
+
+  @@unique([nodeId, tunnelIpV4])
+  @@index([userId])
+  @@index([nodeId, revokedAt])
+  @@map("devices")
+}

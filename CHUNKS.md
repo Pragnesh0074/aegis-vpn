@@ -34,8 +34,8 @@ end of every chunk with what landed, what is next, and any decisions made along 
 | ID | Name | What it delivers | Depends on |
 |----|------|------------------|------------|
 | **C0** | Foundation & docs | Repo layout, `package.json`, `tsconfig`, `.env.example`, `.gitignore`, README, this file, `PROGRESS.md` | — |
-| **C1** | Core app | `main.ts`, `AppModule`, typed+validated config, `PrismaModule/Service`, `/health`, global pipes & filters | C0 |
-| **C2** | Database | `prisma/schema.prisma` (User, Node, Device, RefreshToken), initial migration, seed script | C1 |
+| **C1** | Core app | `main.ts`, `AppModule`, typed+validated config, `PrismaModule/Service`, `/health`, global pipes & filters, **`prisma/schema.prisma`** | C0 |
+| **C2** | Database | Initial migration SQL, idempotent seed script | C1 |
 | **C3** | Auth | argon2 hashing, `POST /auth/register|login|refresh|logout`, `JwtStrategy`, `JwtAuthGuard`, `@CurrentUser()`, refresh rotation | C2 |
 | **C4** | Users | `GET /users/me`, user service, device-count aggregation | C3 |
 | **C5** | Nodes | `GET /nodes` server list with load/capacity, `NodesService` | C3 |
@@ -73,3 +73,17 @@ Every chunk must:
 - **C10 (tests) is last** but the IP allocator and key-validation logic in C6 are the ones
   that actually matter — those are the two places a bug becomes a security or
   correctness incident.
+
+---
+
+## Deviations from the original plan
+
+**C1 absorbed `prisma/schema.prisma` (planned for C2).** Prisma refuses to run
+`generate` against a schema with zero models, and `PrismaService extends PrismaClient`
+cannot compile without a generated client. So the schema is a hard build dependency of
+C1, not something C2 could add later. C2 kept the migration SQL and the seed script.
+
+**The initial migration was generated offline** with
+`prisma migrate diff --from-empty --to-schema-datamodel`, because there was no local
+Postgres available at build time. It is a normal Prisma migration and
+`prisma migrate deploy` applies it as usual.
