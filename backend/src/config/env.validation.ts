@@ -32,6 +32,13 @@ export const envSchema = z
 
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
+    // Required only when DATABASE_URL points at a connection pooler (Supabase's
+    // pgbouncer, Neon, PgBouncer generally). Prisma runs queries over the pooled
+    // connection but migrations need a direct one, because pgbouncer in transaction
+    // mode cannot hold the advisory locks and prepared statements DDL needs.
+    // Unused when Postgres is reached directly.
+    DIRECT_URL: z.string().optional(),
+
     JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be >= 32 chars'),
     JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be >= 32 chars'),
     JWT_ACCESS_TTL: z.string().default('15m'),

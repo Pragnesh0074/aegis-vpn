@@ -1,0 +1,15 @@
+{
+  // Test-only compiler settings.
+  //
+  // `strict` is relaxed here so partial mocks can be written inline without a wall of
+  // `as unknown as T` casts. Production code is still compiled under the strict
+  // settings in tsconfig.json — tsconfig.build.json excludes *.spec.ts, so nothing in
+  // dist/ is built with these relaxations.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": false,
+    "noUnusedLocals": false,
+    "esModuleInterop": true
+  },
+  "include": ["src/**/*", "test/**/*"]
+}

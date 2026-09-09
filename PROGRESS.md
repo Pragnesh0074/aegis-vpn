@@ -4,8 +4,8 @@
 > exists and what comes next. Update it at the end of every chunk, then commit.
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
-**Scope right now:** backend only (NestJS). No Flutter work yet.
-**Last updated:** 2026-09-09 (C0-C9 complete — deployable; only C10 tests remain)
+**Scope right now:** backend **done**. Flutter is next (chunk series F0-Fn, not started).
+**Last updated:** 2026-09-09 (**backend complete** — C0-C10 done, 129 tests green, verified against live Supabase)
 
 ---
 
@@ -23,44 +23,35 @@
 | C7 | Devices | ✅ done |
 | C8 | Hardening | ✅ done |
 | C9 | Ops / deploy | ✅ done |
-| C10 | Tests | ⬜ not started |
+| C10 | Tests | ✅ done |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**C10 — Tests** (the last backend chunk)
+**The backend is complete.** All 11 chunks (C0-C10) are done: 129 tests passing
+(111 unit + 18 e2e), `npm run build` clean, and the full API verified end to end
+against the live Supabase database.
 
-Every chunk from C3 onward was verified with a throwaway script that was deleted after
-it passed. C10 promotes those into the repo so they run in CI and catch regressions.
+What is left before this is a product:
 
-Write real spec files under `backend/src/` (jest is already configured in
-`package.json`, `rootDir: src`, pattern `*.spec.ts`):
+1. **Deploy to the Oracle box** — follow `docs/DEPLOY.md`. This is the one remaining
+   unknown: `ExecWgRunner` has still never run against a real `wg` binary, and
+   `provision.sh` has never been executed. Expect to debug sudoers, binary paths and
+   Oracle's host iptables — not application logic.
+   Note the database now lives on Supabase, so **skip the PostgreSQL parts** of
+   `provision.sh`/`DEPLOY.md` (see the Supabase entry in the decisions log).
+2. **Flutter client** — a new chunk series F0-Fn. Suggested split:
+   - F0 project scaffold, Riverpod, go_router, dio + refresh interceptor
+   - F1 auth screens against `/auth/*`
+   - F2 `VpnService` abstraction + `wireguard_dart`, keypair generated on-device
+   - F3 device registration against `POST /devices`, private key into
+     `flutter_secure_storage`
+   - F4 connect/disconnect UI driven by the status stream, server picker from `/nodes`
+   - F5 Android `VpnService` foreground service + notification
+   - (iOS Network Extension deliberately last — needs a paid org Apple account)
 
-- `config/env.validation.spec.ts` — 10 cases: secret length, identical secrets,
-  `WG_RUNNER=fake` rejected in production, placeholder detection, interface-name
-  injection, and `WG_RECONCILE_ON_BOOT='false'` resolving to `false` (not coerced true)
-- `auth/duration.spec.ts` — 8 cases, valid and rejected
-- `auth/password.service.spec.ts` — round-trip plus the constant-time check
-  (`verifyMaybe(null, …)` must cost comparable work to a real verify)
-- `wireguard/wg-validation.spec.ts` — subnet edges (`.2` first, broadcast excluded,
-  `/31` rejected), unsigned `ipToInt` for octets >= 128, key rejection incl. shell
-  metacharacters
-- `wireguard/ip-allocator.service.spec.ts` — gap reuse, `maxPeers`, malformed rows
-- `wireguard/wireguard.service.spec.ts` — reconcile add/remove/**drift**/idempotency,
-  and the `wg show dump` parser skipping the interface line
-- `devices/devices.service.spec.ts` — P2002 retry vs non-retryable `publicKey`
-  conflict, bounded exhaustion, `applyPeer` rollback, cap, ownership 404
-- `test/app.e2e-spec.ts` — the C8 harness: `Test.createTestingModule` with
-  `.overrideProvider(PrismaService)` + supertest. Covers default-deny auth, the 5/min
-  login throttle, guard ordering (flood yields 429 not 401), validation pipe, and
-  request-id handling. `test/jest-e2e.json` still needs creating.
-
-Target: `npm test` and `npm run test:e2e` both green. Roughly 90 assertions, all of
-which have already been shown to pass as throwaway scripts — this is transcription,
-not new discovery.
-
-After C10 the backend is done. Flutter starts a new chunk series (F0-Fn).
+To start Flutter, say: `Read PROGRESS.md and start the Flutter chunk series.`
 
 ---
 
@@ -120,6 +111,11 @@ Append here as decisions are made, so a later session does not re-litigate them.
 | 2026-09-09 | systemd unit **omits** `NoNewPrivileges` and `ProtectSystem=strict` | Both break the sudo escalation the API needs for `wg` — `NoNewPrivileges` forbids setuid outright, and `ProtectSystem=strict` makes `/etc` read-only for sudo children, so `wg-quick save` fails. The sudoers allowlist is the compensating control |
 | 2026-09-09 | `add-peer.sh` avoids `mapfile` | `mapfile` is bash 4+; if unavailable the used-address array is empty and the script hands out `.2` on top of a live peer. A string + `grep -qxF` cannot fail open |
 | 2026-09-09 | `/etc/aegis/api.env` is mode `640 root:vpnapi` | Holds the database password and both JWT secrets |
+| 2026-09-09 | **Database moved to Supabase** (`ap-northeast-2`, pooled) — set up by the user, not by these chunks | Managed backups and no Postgres to run on the node. Requires `directUrl` in `schema.prisma`: queries go over pgbouncer, but migrations need a direct connection because pgbouncer in transaction mode cannot hold DDL advisory locks |
+| 2026-09-09 | `DIRECT_URL` added to env validation as **optional** | Only needed behind a pooler; a local/direct Postgres does not use it |
+| 2026-09-09 | Tests compile against `tsconfig.spec.json` with `strict: false` | Lets partial mocks be written inline without a wall of casts. `tsconfig.build.json` excludes `*.spec.ts`, so nothing shipped is built with the relaxation |
+| 2026-09-09 | e2e clears throttler storage in `beforeEach` | Counters are per-process, so a flooding test leaves that route limited for every later test. Found the hard way: the guard-ordering test broke the error-shape assertion |
+| 2026-09-09 | `Logger.overrideLogger(false)` in the unit test setup | Several specs exercise error paths deliberately; their logs looked like failures |
 
 ---
 
@@ -137,10 +133,12 @@ Append here as decisions are made, so a later session does not re-litigate them.
 - **Throttler uses in-memory storage.** Fine for one instance; a second API instance
   would each keep their own counters. Swap to the Redis storage provider if the API is
   ever horizontally scaled.
-- **The app now boots.** C8's harness started the full Nest DI graph with an overridden
-  `PrismaService` and drove it over HTTP, so module wiring, guards, pipes, the filter
-  and the throttler are all verified. What remains untested is only the real database
-  layer: migrations, actual queries, and the seed.
+- ~~Never run against a real database~~ — **closed.** The API was booted against live
+  Supabase and driven through the whole flow: register, duplicate-email 409,
+  `/users/me`, `/nodes`, two device issuances (`10.7.0.2/32` then `10.7.0.3/32`),
+  duplicate-publicKey 409, `GET /devices`, refresh rotation, **refresh-reuse theft
+  detection with family revocation**, and `DELETE /devices/:id`. Test data was removed
+  afterwards (0 users / 0 devices / 0 tokens; the seeded node kept).
 - **`ExecWgRunner` has still never run against a real `wg` binary.** C9 wrote the
   provisioning and the sudoers rule, but nothing has been executed on an actual Oracle
   instance. The scripts pass `bash -n` and the address-selection logic is unit-tested,
@@ -150,6 +148,16 @@ Append here as decisions are made, so a later session does not re-litigate them.
 - `provision.sh` was not executed anywhere (it needs root on Ubuntu). Syntax checked
   only. `shellcheck` is not installed on the dev machine; worth running once before
   the first deploy.
+- **`provision.sh` and `DEPLOY.md` still install and configure local PostgreSQL**,
+  which is now redundant because the database is on Supabase. Harmless but wasteful;
+  trim when deploying, or leave it as a fallback path.
+- **Supabase region is `ap-northeast-2` (Seoul) while the VPN node is planned for
+  Mumbai.** Every authenticated request does one indexed user lookup in
+  `JwtStrategy.validate`, so each API call pays a Seoul round-trip (~80-120 ms from
+  India). Fine for the MVP, but consider a Mumbai/Singapore Supabase project, or
+  caching the user lookup, before this carries real traffic.
+- Supabase free-tier projects pause after ~7 days of inactivity; the first request
+  after that will time out until the project resumes.
 - No `updateLastSeen` yet: `Device.lastSeenAt` is never written. Wire it to
   `wg show dump` handshake timestamps in a later chunk (useful for "device inactive").
 
