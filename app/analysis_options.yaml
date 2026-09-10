@@ -1,0 +1,19 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+  errors:
+    # Codegen for a provider needs the `part` directive to resolve before the
+    # generated file exists; a missing part is a build ordering artefact, not a bug.
+    invalid_annotation_target: ignore
+
+linter:
+  rules:
+    # Cannot be satisfied for private fields: Dart forbids `this._x` as a named
+    # parameter, so every injected private dependency would trip this.
+    prefer_initializing_formals: false
+    prefer_single_quotes: true
+    require_trailing_commas: true
+    avoid_print: true
