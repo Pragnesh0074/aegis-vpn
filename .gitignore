@@ -1,0 +1,6 @@
+# Private keys must never be committed. `free-vpn-key.pem` is an SSH key sitting
+# in the repo root, and a `git add -A` would otherwise pick it up.
+*.pem
+*.key
+
+.DS_Store
