@@ -16,6 +16,23 @@ Roughly 45 minutes, most of it waiting on `apt`.
 <details open>
 <summary><b>AWS EC2</b></summary>
 
+### Scripted (recommended)
+
+`ops/aws-bootstrap.sh` does every AWS-side step below, including the source/dest check
+that is easy to forget. It prints a plan and asks before creating anything billable.
+
+```bash
+ops/aws-bootstrap.sh --key-name my-keypair --region ap-south-1
+```
+
+Requires awscli v2 with EC2 permissions. It resolves the current Ubuntu 24.04 arm64
+AMI from Canonical's SSM parameter, so the id is never stale or region-wrong, and it
+verifies `sourceDestCheck` actually flipped rather than assuming the call worked.
+
+The manual equivalent follows.
+
+### Manual
+
 | Setting | Value |
 |---|---|
 | AMI | Ubuntu 24.04 LTS, **arm64** |
