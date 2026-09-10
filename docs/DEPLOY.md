@@ -1,13 +1,80 @@
 # Deploying Aegis VPN
 
-Target: **Oracle Cloud Always Free**, Ampere A1 (ARM64), Ubuntu 24.04, Mumbai.
-Everything runs on one instance — API, database and tunnel.
+Works on **AWS EC2** or **Oracle Cloud** (or any Ubuntu 24.04 host). The application
+is identical either way — only instance creation and the network prerequisites differ.
 
 Roughly 45 minutes, most of it waiting on `apt`.
+
+> The database is on **Supabase**, so the PostgreSQL parts of `provision.sh` and the
+> steps below are redundant. They are harmless — skip them, or leave them as a
+> fallback if you ever move the database onto the box.
 
 ---
 
 ## 1. Create the instance
+
+<details open>
+<summary><b>AWS EC2</b></summary>
+
+| Setting | Value |
+|---|---|
+| AMI | Ubuntu 24.04 LTS, **arm64** |
+| Instance type | **t4g.small** (2 vCPU / 2 GB, Graviton) — `t4g.micro` is fine for an MVP |
+| Storage | 20 GB gp3 |
+| Public IP | Enable, then attach an **Elastic IP** |
+| Key pair | Yours |
+
+WireGuard runs natively on ARM/Graviton at full speed, and Graviton is the cheapest
+sane option.
+
+**Security Group inbound:**
+
+| Source | Protocol | Port |
+|---|---|---|
+| `0.0.0.0/0` | **UDP** | **51820** |
+| `0.0.0.0/0` | TCP | 443 |
+| `0.0.0.0/0` | TCP | 80 |
+| `<your IP>/32` | TCP | 22 |
+
+### ⚠️ Disable the source/destination check
+
+**This is mandatory and is the single AWS-specific step that breaks everything.** EC2
+validates that a packet's source or destination matches the instance's own address and
+**silently discards forwarded traffic** otherwise. The symptom is a WireGuard handshake
+that succeeds followed by no traffic at all — indistinguishable from an MTU or NAT
+problem, which is why it costs people hours.
+
+```bash
+aws ec2 modify-instance-attribute \
+  --instance-id i-0123456789abcdef0 --no-source-dest-check
+```
+
+Console: *EC2 → Instance → Actions → Networking → Change source/destination check →
+Stop*.
+
+It cannot be set from inside the instance, so `provision.sh` can only remind you.
+
+### If you use a custom Network ACL
+
+NACLs are **stateless**, unlike Security Groups. A custom NACL needs an outbound rule
+for ephemeral ports (`1024-65535`) as well as the inbound rules above. The default NACL
+allows everything, so this only matters if you changed it.
+
+### Enforce IMDSv2
+
+Defence in depth alongside the nftables rule that blocks `169.254.0.0/16` from tunnel
+clients:
+
+```bash
+aws ec2 modify-instance-metadata-options \
+  --instance-id i-0123456789abcdef0 \
+  --http-tokens required --http-endpoint enabled
+```
+
+</details>
+
+<details>
+<summary><b>Oracle Cloud (Always Free)</b></summary>
 
 **Compute → Instances → Create:**
 
@@ -22,12 +89,9 @@ Roughly 45 minutes, most of it waiting on `apt`.
 > other availability domains, or retry every few minutes. Do **not** switch to an AMD
 > shape — the free AMD allowance is 1/8 OCPU.
 
-Then **Networking → Reserved IPs** → convert the ephemeral IP to reserved, so it
-survives a reboot.
+Then **Networking → Reserved IPs** → convert the ephemeral IP to reserved.
 
-## 2. Open the VCN Security List
-
-**Networking → VCN → Security Lists → Default → Add Ingress Rules:**
+**VCN → Security Lists → Default → Add Ingress Rules:**
 
 | Source | Protocol | Port |
 |---|---|---|
@@ -36,11 +100,33 @@ survives a reboot.
 | `0.0.0.0/0` | TCP | 80 |
 | `<your IP>/32` | TCP | 22 |
 
-TCP 80 is only needed for Let's Encrypt's HTTP challenge.
-
 > This is **half** the firewall. Oracle's Ubuntu images also carry host iptables rules
 > that drop everything. `provision.sh` opens those — it is the most common reason a
 > correctly-configured OCI WireGuard appears dead.
+
+</details>
+
+## 2. Know what egress will cost
+
+The one number that differs by orders of magnitude between providers. Every byte your
+users pull is billable egress:
+
+| Provider | Egress price | 1,000 users @ 20 GB/mo (20 TB) |
+|---|---|---|
+| Oracle Always Free | 10 TB/mo free, then ~$0.0085/GB | **~$85** |
+| **AWS** | **$0.09/GB** after 100 GB/mo free | **~$1,790/mo** |
+
+Same traffic, ~20× the bill. Hyperscaler egress is priced for API responses, not for
+carrying video.
+
+This does not affect the MVP — a handful of test devices stays inside the free
+allowance. It does decide the economics later. The usual answer is to keep the control
+plane wherever you like and move the **exit nodes** to a flat-rate host (Hetzner
+includes 20 TB at ~€4/mo); the architecture already supports that, since a node is
+just a row in the `nodes` table plus a `provision.sh` run.
+
+Also note AWS IP ranges are published and heavily blocklisted, so users will hit more
+captchas and streaming blocks than on less-recognised ranges.
 
 ## 3. DNS
 
@@ -220,7 +306,8 @@ sudo journalctl -u aegis-api -n 20 | grep Reconciled
 
 | Symptom | Cause |
 |---|---|
-| Tunnel never handshakes | Host iptables. Check `sudo iptables -L INPUT -n --line-numbers` for the UDP 51820 ACCEPT, and confirm the VCN Security List rule. |
+| Tunnel never handshakes | **AWS:** Security Group missing UDP 51820. **Oracle:** host iptables — check `sudo iptables -L INPUT -n --line-numbers` for the UDP 51820 ACCEPT, plus the VCN Security List rule. |
+| Handshake succeeds, then nothing at all | **AWS: the source/destination check is still enabled.** This is the classic one. Also check `net.ipv4.ip_forward` and the nftables NIC name. |
 | Handshake works, no internet | `net.ipv4.ip_forward`, or the nftables NIC name. `ip -4 route show default` must match the `iifname`/`oifname` in `/etc/nftables.d/aegis-vpn.nft`. |
 | Pings fine, large transfers hang | MTU. Try 1280. |
 | DNS resolves nothing in-tunnel | `systemctl status unbound`. Missing `ip-freebind: yes` makes it fail to bind `10.7.0.1` before wg0 exists. |

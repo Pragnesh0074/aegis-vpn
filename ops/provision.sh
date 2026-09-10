@@ -3,8 +3,11 @@
 # Aegis VPN — node provisioning.
 #
 # Sets up WireGuard, nftables, Unbound, PostgreSQL and the service account on a
-# fresh Ubuntu 24.04 box. Written for Oracle Cloud Ampere (ARM64) but works on any
-# Ubuntu host.
+# fresh Ubuntu 24.04 box. Cloud-agnostic: tested against Oracle Cloud (Ampere ARM64)
+# and AWS EC2 (Graviton ARM64), and works on any Ubuntu host including bare metal.
+#
+# Provider-specific steps that CANNOT be done from inside the instance are detected
+# and printed as reminders at the end — see check_cloud_prerequisites().
 #
 # Idempotent: safe to re-run. It will NOT overwrite an existing wg0.conf or server
 # keypair, because doing so would invalidate every issued peer.
@@ -17,11 +20,40 @@ TUNNEL_NET="10.7.0.0/24"
 TUNNEL_SERVER_IP="10.7.0.1"
 TUNNEL_SERVER_IP6="fd42:7::1"
 WG_PORT="51820"
-WG_MTU="1420"          # OCI's internet path MTU is 1500, so no reduction needed
+WG_MTU="1420"          # Internet path MTU is 1500 on AWS and OCI alike (GCP needs less)
 WG_IF="wg0"
 DB_NAME="aegis"
 DB_USER="aegis"
 SERVICE_USER="vpnapi"
+
+# ── Cloud detection ─────────────────────────────────────────────────────────────
+# Each provider answers on the link-local metadata address but with a different
+# handshake. Best-effort only: an unknown result is fine, it just means no
+# provider-specific reminders are printed.
+detect_cloud() {
+  local md="http://169.254.169.254"
+
+  # AWS requires an IMDSv2 token (IMDSv1 may be disabled).
+  local token
+  token="$(curl -s --max-time 2 -X PUT "$md/latest/api/token" \
+    -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' 2>/dev/null || true)"
+  if [[ -n "$token" ]]; then echo "aws"; return; fi
+  if curl -s --max-time 2 "$md/latest/meta-data/instance-id" >/dev/null 2>&1; then
+    echo "aws"; return
+  fi
+
+  if curl -s --max-time 2 -H 'Authorization: Bearer Oracle' \
+      "$md/opc/v2/instance/" >/dev/null 2>&1; then
+    echo "oracle"; return
+  fi
+
+  if curl -s --max-time 2 -H 'Metadata-Flavor: Google' \
+      "$md/computeMetadata/v1/instance/id" >/dev/null 2>&1; then
+    echo "gcp"; return
+  fi
+
+  echo "unknown"
+}
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
@@ -54,13 +86,16 @@ SYSCTL
 sysctl --system >/dev/null
 ok "net.ipv4.ip_forward=1"
 
-# ── Oracle's second firewall ────────────────────────────────────────────────────
-# Opening the VCN Security List is NOT enough. Oracle's Ubuntu images ship iptables
-# rules that drop everything, ending in a REJECT on INPUT. This is the single most
-# common cause of "my OCI WireGuard silently doesn't work".
+# ── Host firewall ───────────────────────────────────────────────────────────────
+# Oracle's Ubuntu images ship iptables rules that drop everything, ending in a
+# REJECT on INPUT — opening the VCN Security List alone is not enough, and this is
+# the single most common cause of "my OCI WireGuard silently doesn't work".
+#
+# AWS images do not do this (they rely purely on Security Groups), so these rules are
+# a harmless no-op there. Applied unconditionally so the script stays portable.
 #
 # -C checks for the rule first, so re-running does not stack duplicates.
-log "Opening host iptables (Oracle images drop by default)"
+log "Opening host iptables (no-op on AWS, required on Oracle)"
 for spec in "udp 51820" "tcp 443" "tcp 80"; do
   read -r proto port <<<"$spec"
   if iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null; then
@@ -226,6 +261,73 @@ else
   ok "${WG_IF} up"
 fi
 
+# ── Provider-specific prerequisites ─────────────────────────────────────────────
+# Things that must be done through the cloud console/CLI and cannot be applied from
+# inside the instance. Getting these wrong produces the same symptom in every case:
+# the WireGuard handshake completes, then no traffic flows at all.
+CLOUD="$(detect_cloud)"
+
+print_cloud_reminders() {
+  case "$CLOUD" in
+    aws)
+      cat <<'AWSNOTE'
+
+  ┌─ AWS ────────────────────────────────────────────────────────────────────────┐
+  │ 1. DISABLE THE SOURCE/DESTINATION CHECK. This is mandatory and is the AWS     │
+  │    equivalent of Oracle's host firewall trap: with it enabled, EC2 silently   │
+  │    drops every forwarded packet, so the tunnel handshakes and then nothing    │
+  │    works. It cannot be set from inside the instance.                          │
+  │                                                                              │
+  │      aws ec2 modify-instance-attribute \                                     │
+  │        --instance-id <this-instance-id> --no-source-dest-check               │
+  │                                                                              │
+  │    Console: EC2 -> Instance -> Actions -> Networking ->                       │
+  │             Change source/destination check -> Stop (uncheck)                 │
+  │                                                                              │
+  │ 2. Security Group inbound: UDP 51820, TCP 443, TCP 80, and SSH from your IP.  │
+  │                                                                              │
+  │ 3. If you use a CUSTOM Network ACL, remember NACLs are STATELESS — you need   │
+  │    an outbound rule for ephemeral ports (1024-65535) as well as the inbound   │
+  │    rules. The default NACL allows everything, so this only bites if changed.  │
+  │                                                                              │
+  │ 4. Attach an Elastic IP, or the address changes on every stop/start.          │
+  └──────────────────────────────────────────────────────────────────────────────┘
+AWSNOTE
+      ;;
+    oracle)
+      cat <<'OCINOTE'
+
+  ┌─ Oracle Cloud ───────────────────────────────────────────────────────────────┐
+  │ 1. VCN Security List ingress: UDP 51820, TCP 443, TCP 80, SSH from your IP.   │
+  │    The host iptables half has already been applied by this script.            │
+  │ 2. Convert the ephemeral public IP to a Reserved IP so it survives a reboot.  │
+  └──────────────────────────────────────────────────────────────────────────────┘
+OCINOTE
+      ;;
+    gcp)
+      cat <<'GCPNOTE'
+
+  ┌─ Google Cloud ───────────────────────────────────────────────────────────────┐
+  │ 1. The instance MUST have been created with --can-ip-forward. It cannot be    │
+  │    added afterwards; the instance has to be recreated.                        │
+  │ 2. GCP's VPC MTU defaults to 1460, not 1500. Lower WG_MTU to 1380 in this     │
+  │    script and in the seeded node row, or large transfers will hang.           │
+  │ 3. VPC firewall rule allowing udp:51820 ingress.                              │
+  └──────────────────────────────────────────────────────────────────────────────┘
+GCPNOTE
+      ;;
+    *)
+      cat <<'GENERICNOTE'
+
+  ┌─ Host ───────────────────────────────────────────────────────────────────────┐
+  │ No cloud metadata service detected. Make sure UDP 51820 reaches this machine  │
+  │ (port-forward it if behind NAT) and that nothing upstream filters it.         │
+  └──────────────────────────────────────────────────────────────────────────────┘
+GENERICNOTE
+      ;;
+  esac
+}
+
 # ── Summary ─────────────────────────────────────────────────────────────────────
 PUBLIC_IP="$(curl -4 -s --max-time 5 ifconfig.me || echo '<unknown>')"
 
@@ -233,6 +335,7 @@ cat <<SUMMARY
 
 $(printf '\033[1;32m')Provisioning complete.$(printf '\033[0m')
 
+  Detected cloud   ${CLOUD}
   Interface        ${WG_IF} on ${NIC}
   Listening        ${PUBLIC_IP}:${WG_PORT}/udp
   Tunnel subnet    ${TUNNEL_NET}   DNS ${TUNNEL_SERVER_IP}   MTU ${WG_MTU}
@@ -242,6 +345,8 @@ $(printf '\033[1;32m')Provisioning complete.$(printf '\033[0m')
 
   DATABASE_URL:
     postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}?schema=public
+
+$(print_cloud_reminders)
 
 Next:
   1. Verify the tunnel with the OFFICIAL WireGuard app before deploying the API:

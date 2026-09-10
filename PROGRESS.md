@@ -5,7 +5,7 @@
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
 **Scope right now:** backend **done**. Flutter is next (chunk series F0-Fn, not started).
-**Last updated:** 2026-09-09 (**backend complete** — C0-C10 done, 129 tests green, verified against live Supabase)
+**Last updated:** 2026-09-10 (backend complete; ops layer made cloud-agnostic for AWS)
 
 ---
 
@@ -35,11 +35,11 @@ against the live Supabase database.
 
 What is left before this is a product:
 
-1. **Deploy to the Oracle box** — follow `docs/DEPLOY.md`. This is the one remaining
-   unknown: `ExecWgRunner` has still never run against a real `wg` binary, and
-   `provision.sh` has never been executed. Expect to debug sudoers, binary paths and
-   Oracle's host iptables — not application logic.
-   Note the database now lives on Supabase, so **skip the PostgreSQL parts** of
+1. **Deploy to AWS** — follow `docs/DEPLOY.md` (it now has an AWS path and an Oracle
+   path). This is the one remaining unknown: `ExecWgRunner` has still never run against
+   a real `wg` binary, and `provision.sh` has never been executed. Expect to debug the
+   source/dest check, sudoers and binary paths — not application logic.
+   The database is on Supabase, so **skip the PostgreSQL parts** of
    `provision.sh`/`DEPLOY.md` (see the Supabase entry in the decisions log).
 2. **Flutter client** — a new chunk series F0-Fn. Suggested split:
    - F0 project scaffold, Riverpod, go_router, dio + refresh interceptor
@@ -61,7 +61,10 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 | Date | Decision | Why |
 |------|----------|-----|
-| 2026-09-09 | Host: Oracle Cloud Always Free, Ampere A1 ARM, **Mumbai** | 10 TB/mo free egress; Indian exit IP; genuinely $0 |
+| 2026-09-09 | ~~Host: Oracle Cloud Always Free, Ampere A1 ARM, Mumbai~~ | superseded 2026-09-10 |
+| 2026-09-10 | **Host: AWS EC2** (Graviton ARM64), user's choice | Ops layer is now provider-agnostic; `provision.sh` detects the cloud from the metadata service and prints provider-specific prerequisites. **No application code changed** — the API never knew which cloud it was on |
+| 2026-09-10 | AWS **source/destination check must be disabled** — the one mandatory AWS-only step | EC2 silently discards forwarded packets otherwise. Symptom is a successful handshake followed by no traffic, which looks identical to an MTU or NAT fault. Cannot be set from inside the instance, so the script can only remind |
+| 2026-09-10 | Egress cost accepted as a known trade-off | AWS charges ~$0.09/GB vs Oracle's 10 TB/mo free. Irrelevant at MVP scale; at 1,000 users (~20 TB/mo) it is ~$1,790/mo vs ~$85. The fix when it matters is moving **exit nodes** to a flat-rate host — a node is just a `nodes` row plus a `provision.sh` run, so no rearchitecture |
 | 2026-09-09 | Protocol: **WireGuard**, kernel module | Fast, Apache-2.0/MIT (commercial-safe), simple |
 | 2026-09-09 | Backend: **NestJS 10 + Prisma + PostgreSQL 16** | User's choice |
 | 2026-09-09 | MVP runs API **on the same box as `wg0`** | Avoids building a node-agent + mTLS control plane for one node. Split at multi-region. |
@@ -140,7 +143,7 @@ Append here as decisions are made, so a later session does not re-litigate them.
   detection with family revocation**, and `DELETE /devices/:id`. Test data was removed
   afterwards (0 users / 0 devices / 0 tokens; the seeded node kept).
 - **`ExecWgRunner` has still never run against a real `wg` binary.** C9 wrote the
-  provisioning and the sudoers rule, but nothing has been executed on an actual Oracle
+  provisioning and the sudoers rule, but nothing has been executed on an actual cloud
   instance. The scripts pass `bash -n` and the address-selection logic is unit-tested,
   but package installs, `netfilter-persistent`, the Postgres role setup and the sudo
   escalation are all unverified. First real deploy will surface issues — expect
@@ -151,8 +154,8 @@ Append here as decisions are made, so a later session does not re-litigate them.
 - **`provision.sh` and `DEPLOY.md` still install and configure local PostgreSQL**,
   which is now redundant because the database is on Supabase. Harmless but wasteful;
   trim when deploying, or leave it as a fallback path.
-- **Supabase region is `ap-northeast-2` (Seoul) while the VPN node is planned for
-  Mumbai.** Every authenticated request does one indexed user lookup in
+- **Supabase region is `ap-northeast-2` (Seoul).** If the EC2 instance is not also in
+  Seoul, this applies: Every authenticated request does one indexed user lookup in
   `JwtStrategy.validate`, so each API call pays a Seoul round-trip (~80-120 ms from
   India). Fine for the MVP, but consider a Mumbai/Singapore Supabase project, or
   caching the user lookup, before this carries real traffic.

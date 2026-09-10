@@ -4,9 +4,9 @@ A self-hosted WireGuard VPN — your own servers, your own keys, no reseller in 
 
 | | |
 |---|---|
-| **Backend** | NestJS 10 · TypeScript · Prisma · PostgreSQL 16 |
+| **Backend** | NestJS 10 · TypeScript · Prisma · PostgreSQL (Supabase) |
 | **Tunnel** | WireGuard (kernel module) · nftables · Unbound |
-| **Host** | Oracle Cloud Always Free — Ampere A1 (ARM64), Mumbai |
+| **Host** | AWS EC2 (Graviton ARM64) or Oracle Cloud Ampere — see `docs/DEPLOY.md` |
 | **Client** | Flutter (not started — see `CHUNKS.md`) |
 
 ## Repo layout
@@ -32,7 +32,8 @@ See [CHUNKS.md](CHUNKS.md) for the full plan and [PROGRESS.md](PROGRESS.md) for 
 
 ## Architecture (MVP)
 
-Everything runs on one Oracle Cloud instance. 2 OCPU / 12 GB handles this comfortably.
+Everything except the database runs on one instance. The API is cloud-agnostic —
+only `ops/` and `docs/` know which provider you are on.
 
 ```
  Flutter app ──HTTPS──> Caddy :443 ──> NestJS :3000 ──> PostgreSQL

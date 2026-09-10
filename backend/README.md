@@ -36,7 +36,7 @@ curl http://localhost:3000/health
 
 ## Production
 
-`WG_RUNNER=exec` on the Oracle instance, which calls the real `wg` binary through a
+`WG_RUNNER=exec` on the VPN node, which calls the real `wg` binary through a
 narrow sudoers rule. See `docs/DEPLOY.md` (chunk C9).
 
 ## Configuration
