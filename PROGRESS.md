@@ -4,8 +4,9 @@
 > exists and what comes next. Update it at the end of every chunk, then commit.
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
-**Scope right now:** backend **done**. Flutter is next (chunk series F0-Fn, not started).
-**Last updated:** 2026-09-10 (backend complete; ops layer made cloud-agnostic for AWS)
+**Scope right now:** backend **done**. Flutter client **done** for every existing API,
+Android VPN tunnel **written but not yet handshaked**. iOS is deliberately deferred.
+**Last updated:** 2026-09-10 (Android tunnel done; iOS deferred, `app/ios` is stock scaffold)
 
 ---
 
@@ -24,6 +25,14 @@
 | C8 | Hardening | ✅ done |
 | C9 | Ops / deploy | ✅ done |
 | C10 | Tests | ✅ done |
+| F0 | Client core (config, Dio, interceptor, session, router, theme) | ✅ done |
+| F1 | Client auth (register / login / refresh / logout) | ✅ done |
+| F2 | Client profile (`/users/me`) | ✅ done |
+| F3 | Client nodes (`/nodes`) | ✅ done |
+| F4 | Client devices (keygen, issue, list, revoke) | ✅ done |
+| F5 | Client health + tabbed shell | ✅ done |
+| F6 | Platform VPN tunnel — Android (`VpnService` via wireguard-android) | 🟡 builds, never handshaked |
+| F7 | Platform VPN tunnel — iOS (Network Extension) | ⬜ deferred |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
@@ -33,25 +42,33 @@ Legend: ⬜ not started · 🟡 in progress · ✅ done
 (111 unit + 18 e2e), `npm run build` clean, and the full API verified end to end
 against the live Supabase database.
 
+The Flutter client in `app/` integrates every endpoint the API exposes, module by
+module (F0-F5). It is verified two ways: a widget suite that renders every offline
+screen at 320x640 and 430x932 and fails on an overflow, and a live contract suite
+that drives all six repositories against a running backend
+(`flutter test test/integration --tags live --run-skipped`). See `app/README.md`.
+
 What is left before this is a product:
 
-1. **Deploy to AWS** — follow `docs/DEPLOY.md` (it now has an AWS path and an Oracle
-   path). This is the one remaining unknown: `ExecWgRunner` has still never run against
-   a real `wg` binary, and `provision.sh` has never been executed. Expect to debug the
-   source/dest check, sudoers and binary paths — not application logic.
-   The database is on Supabase, so **skip the PostgreSQL parts** of
-   `provision.sh`/`DEPLOY.md` (see the Supabase entry in the decisions log).
-2. **Flutter client** — a new chunk series F0-Fn. Suggested split:
-   - F0 project scaffold, Riverpod, go_router, dio + refresh interceptor
-   - F1 auth screens against `/auth/*`
-   - F2 `VpnService` abstraction + `wireguard_dart`, keypair generated on-device
-   - F3 device registration against `POST /devices`, private key into
-     `flutter_secure_storage`
-   - F4 connect/disconnect UI driven by the status stream, server picker from `/nodes`
-   - F5 Android `VpnService` foreground service + notification
-   - (iOS Network Extension deliberately last — needs a paid org Apple account)
+0. **Handshake the Android tunnel against the live node.** F6 compiles and the APK
+   builds, but no client has ever completed a handshake — nothing in the test suite
+   touches `TunnelBridge.kt`, and it has never been run on a physical device. Until
+   `sudo wg show wg0` reports a `latest handshake` for the phone's public key and
+   traffic actually egresses, the Android tunnel is unproven, not done.
 
-To start Flutter, say: `Read PROGRESS.md and start the Flutter chunk series.`
+1. ~~Deploy~~ **Done.** The node is live at `13.201.194.65` (EC2, ap-south-1):
+   `wg0` up on 51820, `WG_RUNNER=exec`, `ip_forward=1`, and peers the API added
+   present in `wg show`. So `ExecWgRunner` *has* run against a real `wg` binary and
+   `provision.sh` *has* been executed — the old "never run" note here was stale.
+   Operating instructions are in `docs/SERVER-OPS.md`.
+2. **iOS (F7).** Not started, on purpose — a Network Extension needs a paid
+   organization Apple account. `app/ios/` is the untouched Flutter scaffold. The
+   Dart side is already platform-agnostic: `TunnelChannel` speaks a MethodChannel
+   (`vpn.aegis/tunnel`) and an EventChannel (`vpn.aegis/tunnel/status`), so iOS
+   means answering those two from a `NEPacketTunnelProvider` backed by WireGuardKit,
+   with no change above the channel.
+
+To continue the client, say: `Read PROGRESS.md and build F7.`
 
 ---
 
@@ -168,8 +185,7 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 ## Deferred (explicitly out of MVP scope)
 
-- Flutter app — separate chunk series F0–Fn, after backend is done
-- iOS Network Extension target (needs paid org Apple account)
+- iOS Network Extension target (F7 — needs paid org Apple account)
 - Payments / RevenueCat, subscription tiers
 - Multi-region + separate `node-agent` control plane
 - Per-user bandwidth metering and quota enforcement

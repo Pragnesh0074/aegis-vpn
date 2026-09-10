@@ -7,7 +7,7 @@ A self-hosted WireGuard VPN — your own servers, your own keys, no reseller in 
 | **Backend** | NestJS 10 · TypeScript · Prisma · PostgreSQL (Supabase) |
 | **Tunnel** | WireGuard (kernel module) · nftables · Unbound |
 | **Host** | AWS EC2 (Graviton ARM64) or Oracle Cloud Ampere — see `docs/DEPLOY.md` |
-| **Client** | Flutter (not started — see `CHUNKS.md`) |
+| **Client** | Flutter · Riverpod 3 · Dio · go_router — see `app/README.md` |
 
 ## Repo layout
 
@@ -16,7 +16,8 @@ aegis-vpn/
 ├── CHUNKS.md      # the build plan, chunk by chunk
 ├── PROGRESS.md    # live state — read this first
 ├── README.md
-└── backend/       # NestJS API
+├── backend/       # NestJS API
+└── app/           # Flutter client
 ```
 
 ## Building this project
