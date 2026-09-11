@@ -7,7 +7,7 @@
 **Scope right now:** backend **done** and one node live. Flutter client **done** and
 **handshaking against the live node**. Next up is the M series: making the control plane
 able to program more than one node. iOS is deliberately deferred.
-**Last updated:** 2026-09-11 (M0-M1 deployed to Mumbai; Frankfurt live, held inactive pending its SG rule)
+**Last updated:** 2026-09-11 (M2 done — two countries live, peer issuance verified on the correct interface)
 
 ---
 
@@ -36,7 +36,7 @@ able to program more than one node. iOS is deliberately deferred.
 | F7 | Platform VPN tunnel — iOS (Network Extension) | ⬜ deferred |
 | M0 | Node-aware control plane (`WG_NODE_ID`, per-node runner) | ✅ done |
 | M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
-| M2 | Second node (Frankfurt) | 🟡 both nodes live, awaiting one SG rule |
+| M2 | Second node (Frankfurt) | ✅ done |
 | M3 | What "automatic" means across countries | ⬜ not started |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
@@ -57,43 +57,33 @@ a stopped instance rather than a security-group rule.
 | endpoint | `13.126.153.247:51820` | `3.71.204.118:51820` |
 | subnet | `10.8.0.0/24` | `10.9.0.0/24` |
 | role | control (API + agent-less, programmed locally) | exit (`NODE_ROLE=exit`, agent on :8787) |
-| active | `true` | **`false`** — deliberately |
+| active | `true` | `true` |
 
 Frankfurt is held inactive on purpose. Two active nodes while Mumbai still runs
 pre-M0 code means `selectLeastLoaded()` can choose Frankfurt while the peer is
 written to Mumbai's interface, which is the exact silent failure this series
 removes. Activate it only after step 3 below.
 
-### To finish
+### Verified end to end on 2026-09-11
 
-Mumbai now runs M0/M1 with `WG_NODE_ID` set; boot reconciliation resolved its own
-node correctly (`Reconciled wg0: +0 -0 =4`). One thing blocks activation:
+Against the live fleet, through the API on Mumbai:
 
-1. **Frankfurt's security group still whitelists Mumbai's old address** for TCP
-   8787. Mumbai moved from `13.201.194.65` to `13.126.153.247` when it was
-   restarted without an Elastic IP, so `curl` from Mumbai to the agent times out.
-   Update the rule to `13.126.153.247/32`.
-2. **Then activate Frankfurt**:
-   `update nodes set active = true where region = 'de-frankfurt';`
+```
+POST /devices  nodeId=<frankfurt>   ->  tunnelIp 10.9.0.2/32
+                                        node Frankfurt #1 (de-frankfurt)
+                                        endpoint 3.71.204.118:51820
+frankfurt wg0: peer present, allowed ips 10.9.0.2/32
+mumbai    wg0: peer absent (0 occurrences)
+DELETE /devices/:id -> 204, peer removed from frankfurt wg0
+```
 
-Do not reverse that order. `selectLeastLoaded()` ranks by free slots, so the
-moment Frankfurt is active it becomes the default choice for every new device —
-Frankfurt has 250 free against Mumbai's 246. With the agent unreachable, each of
-those issues would fail with a 503 instead of quietly landing on the wrong
-interface. That is the M0 behaviour working as designed, but it still means every
-new signup breaks until the rule is fixed.
+That is the M series' whole purpose demonstrated: a peer for a node the API is
+not running on was installed on *that* node's interface, and revoking it removed
+it from there. Before M0 both operations hit Mumbai's `wg0` regardless of the
+node chosen.
 
-3. **Verify**: connect from the app choosing Germany, then on the Frankfurt box
-   confirm `sudo wg show wg0` reports a real `latest handshake`.
-
-### Neither instance has an Elastic IP
-
-Accepted for the MVP, but every stop/start changes both addresses and each change
-breaks four things: the `nodes.endpoint`, the `agentUrl`, the Frankfurt SG rule,
-and `_defaultBaseUrl` in `app/lib/core/config/app_config.dart` (which needs an APK
-rebuild). Existing devices cannot recover at all, because the endpoint is only ever
-returned by `POST /devices`. An Elastic IP costs the same as the ephemeral address
-already being billed; the alternative is a domain plus a dynamic-DNS updater.
+`GET /nodes` returns both countries, and the client renders them as India and
+Germany with flags (pinned by `test/unit/fleet_render_test.dart`).
 
 Then **M3**: decide what "automatic" means now that two countries exist.
 `selectLeastLoaded()` sorts by free slots, so it will send a Mumbai user to
