@@ -1,0 +1,50 @@
+# Aegis VPN node-agent — the thing that programs THIS node's WireGuard interface.
+#
+# Runs on every exit node. The API runs aegis-api.service on exactly one machine
+# and reaches every other node through this. Both are the same deployed artifact,
+# only the entrypoint differs.
+#
+# Install:
+#   sudo cp ops/aegis-agent.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now aegis-agent
+#
+[Unit]
+Description=Aegis VPN node agent
+Documentation=file:///opt/aegis-vpn/docs/SERVER-OPS.md
+After=network-online.target wg-quick@wg0.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vpnapi
+Group=vpnapi
+WorkingDirectory=/opt/aegis-vpn/backend
+EnvironmentFile=/etc/aegis/agent.env
+ExecStart=/usr/bin/node dist/agent/main.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aegis-agent
+
+# ── Sandboxing ──────────────────────────────────────────────────────────────────
+# Same constraint as aegis-api.service, for the same reason: this process escalates
+# through sudo to run `wg set` and `wg-quick save`.
+#
+#   NoNewPrivileges=yes   BREAKS sudo outright — setuid is exactly what it forbids.
+#   ProtectSystem=strict  makes /etc read-only for sudo children too, so
+#                         `wg-quick save` fails when it rewrites wg0.conf.
+#
+# The compensating control is the sudoers rule in /etc/sudoers.d/aegis-vpnapi,
+# which permits only three commands on one interface. Do not add those directives
+# — peer creation will fail silently and the API will 500 on every POST /devices.
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=no
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

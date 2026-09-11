@@ -53,6 +53,14 @@ model Node {
   mtu        Int      @default(1420)
   maxPeers   Int      @default(250)
   active     Boolean  @default(true)
+
+  /// Base URL of this node's `node-agent`, e.g. https://fra1.internal:8787.
+  /// Null means the node is programmed locally, which is only true of the host the
+  /// API itself runs on (see WG_NODE_ID).
+  agentUrl   String?
+  /// Bearer token for that agent. Per-node so one can be rotated alone; the agent
+  /// holds no database access, so this grants control of one interface and nothing else.
+  agentToken String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
