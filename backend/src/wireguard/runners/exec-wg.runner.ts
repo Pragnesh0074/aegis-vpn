@@ -1,8 +1,13 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Inject, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { AppConfig } from '../../config/configuration';
-import type { WgPeer, WgPeerSpec, WgRunner } from '../wg-runner';
+import {
+  WG_EXEC_OPTIONS,
+  type WgExecOptions,
+  type WgPeer,
+  type WgPeerSpec,
+  type WgRunner,
+} from '../wg-runner';
 import { assertValidPublicKey } from '../wg-validation';
 
 const run = promisify(execFile);
@@ -28,16 +33,16 @@ export class ExecWgRunner implements WgRunner {
   readonly kind = 'exec' as const;
   private readonly logger = new Logger(ExecWgRunner.name);
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(@Inject(WG_EXEC_OPTIONS) private readonly options: WgExecOptions) {}
 
   private get iface(): string {
-    // Already regex-validated at boot by env.validation.ts.
-    return this.config.wgInterface;
+    // Already regex-validated at boot, by the API's env schema or the agent's.
+    return this.options.interfaceName;
   }
 
   private async wg(args: string[]): Promise<string> {
     try {
-      const { stdout } = await run(SUDO, [this.config.wgBinary, ...args], {
+      const { stdout } = await run(SUDO, [this.options.binary, ...args], {
         timeout: TIMEOUT_MS,
       });
       return stdout;
@@ -98,7 +103,7 @@ export class ExecWgRunner implements WgRunner {
    */
   async persist(): Promise<void> {
     try {
-      await run(SUDO, [this.config.wgQuickBinary, 'save', this.iface], { timeout: TIMEOUT_MS });
+      await run(SUDO, [this.options.quickBinary, 'save', this.iface], { timeout: TIMEOUT_MS });
     } catch (error) {
       // Non-fatal: the peer is live in the kernel. Postgres remains the source of
       // truth and boot reconciliation will restore it, so do not fail the request.

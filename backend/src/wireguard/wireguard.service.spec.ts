@@ -5,6 +5,8 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { IpAllocatorService } from './ip-allocator.service';
 import { ExecWgRunner } from './runners/exec-wg.runner';
 import { FakeWgRunner } from './runners/fake-wg.runner';
+import type { WgRunner } from './wg-runner';
+import { WgRunnerRegistry } from './wg-runner.registry';
 import { WireguardService } from './wireguard.service';
 
 const key = () => randomBytes(32).toString('base64');
@@ -18,14 +20,27 @@ const node = {
 
 const config = { wgReconcileOnBoot: true, wgInterface: 'wg0' } as AppConfig;
 
+/**
+ * A registry with no `WG_NODE_ID` and a single active node — the shape of the
+ * original single-node deployment, where every node resolves to the local runner.
+ */
+function localRegistry(runner: WgRunner, prisma: PrismaService): WgRunnerRegistry {
+  return new WgRunnerRegistry(runner, config, prisma);
+}
+
 function build(devices: { publicKey: string; tunnelIpV4: string }[]) {
   const prisma = {
-    node: { findFirst: async () => node, findUnique: async () => node },
+    node: { findFirst: async () => node, findUnique: async () => node, count: async () => 1 },
     device: { findMany: async () => devices },
   } as unknown as PrismaService;
 
   const runner = new FakeWgRunner();
-  const service = new WireguardService(runner, prisma, new IpAllocatorService(prisma), config);
+  const service = new WireguardService(
+    localRegistry(runner, prisma),
+    prisma,
+    new IpAllocatorService(prisma),
+    config,
+  );
   return { runner, service };
 }
 
@@ -94,11 +109,11 @@ describe('WireguardService.reconcile', () => {
 
   it('throws when there is no node row to reconcile against', async () => {
     const prisma = {
-      node: { findFirst: async () => null, findUnique: async () => null },
+      node: { findFirst: async () => null, findUnique: async () => null, count: async () => 0 },
       device: { findMany: async () => [] },
     } as unknown as PrismaService;
     const service = new WireguardService(
-      new FakeWgRunner(),
+      localRegistry(new FakeWgRunner(), prisma),
       prisma,
       new IpAllocatorService(prisma),
       config,
@@ -157,7 +172,11 @@ describe('WireguardService.onApplicationBootstrap', () => {
 
 describe('ExecWgRunner.listPeers', () => {
   const runner = () =>
-    new ExecWgRunner({ wgInterface: 'wg0', wgBinary: '/usr/bin/wg' } as AppConfig);
+    new ExecWgRunner({
+      interfaceName: 'wg0',
+      binary: '/usr/bin/wg',
+      quickBinary: '/usr/bin/wg-quick',
+    });
 
   const withDump = (dump: string) => {
     const r = runner();
@@ -188,9 +207,10 @@ describe('ExecWgRunner.listPeers', () => {
 
   it('parses allowed-ips and transfer counters', async () => {
     const [peer] = await withDump(
-      ['IFACE\tPUB\t51820\toff', `${kA}\t(none)\t1.2.3.4:1234\t10.7.0.2/32\t1757000000\t1024\t2048\t25`].join(
-        '\n',
-      ),
+      [
+        'IFACE\tPUB\t51820\toff',
+        `${kA}\t(none)\t1.2.3.4:1234\t10.7.0.2/32\t1757000000\t1024\t2048\t25`,
+      ].join('\n'),
     ).listPeers();
 
     expect(peer.allowedIps).toEqual(['10.7.0.2/32']);

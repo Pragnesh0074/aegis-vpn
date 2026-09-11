@@ -26,7 +26,24 @@ export interface WgRunner {
   listPeers(): Promise<WgPeer[]>;
   /** Writes the running config to disk so peers survive a reboot. */
   persist(): Promise<void>;
-  readonly kind: 'exec' | 'fake';
+  readonly kind: 'exec' | 'fake' | 'http';
 }
 
+/** The runner for the interface on *this* host. See `WgRunnerRegistry`. */
 export const WG_RUNNER = Symbol('WG_RUNNER');
+
+/**
+ * What `ExecWgRunner` needs to drive `wg`, and nothing else.
+ *
+ * Narrower than `AppConfig` on purpose: the node agent runs the same runner
+ * without a database URL or a JWT secret anywhere in its environment, and it
+ * could not do that if the runner demanded the API's whole config object.
+ */
+export interface WgExecOptions {
+  /** Interface name, already regex-validated — this value reaches an argv array. */
+  interfaceName: string;
+  binary: string;
+  quickBinary: string;
+}
+
+export const WG_EXEC_OPTIONS = Symbol('WG_EXEC_OPTIONS');

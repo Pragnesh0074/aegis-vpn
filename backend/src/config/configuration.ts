@@ -68,6 +68,10 @@ export class AppConfig {
   get wgReconcileOnBoot() {
     return this.get('WG_RECONCILE_ON_BOOT');
   }
+  /** Undefined until the fleet has more than one node; see `WgRunnerRegistry`. */
+  get wgNodeId() {
+    return this.get('WG_NODE_ID');
+  }
 
   get seedNode() {
     return {

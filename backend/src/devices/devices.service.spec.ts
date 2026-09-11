@@ -6,6 +6,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { UsersService } from '../users/users.service';
 import { IpAllocatorService } from '../wireguard/ip-allocator.service';
 import { FakeWgRunner } from '../wireguard/runners/fake-wg.runner';
+import { WgRunnerRegistry } from '../wireguard/wg-runner.registry';
 import { WireguardService } from '../wireguard/wireguard.service';
 import { DevicesService } from './devices.service';
 import type { CreateDeviceDto } from './dto/create-device.dto';
@@ -60,12 +61,21 @@ function harness(options: HarnessOptions) {
         return {} as Device;
       },
     },
-    node: { findFirst: async () => node, findUnique: async () => node },
+    node: { findFirst: async () => node, findUnique: async () => node, count: async () => 1 },
   } as unknown as PrismaService;
 
-  const config = { maxDevicesPerUser: 5, wgInterface: 'wg0', wgReconcileOnBoot: false } as AppConfig;
+  const config = {
+    maxDevicesPerUser: 5,
+    wgInterface: 'wg0',
+    wgReconcileOnBoot: false,
+  } as AppConfig;
   const runner = new FakeWgRunner();
-  const wg = new WireguardService(runner, prisma, new IpAllocatorService(prisma), config);
+  const wg = new WireguardService(
+    new WgRunnerRegistry(runner, config, prisma),
+    prisma,
+    new IpAllocatorService(prisma),
+    config,
+  );
 
   const users = {
     hasDeviceCapacity: async () => options.hasCapacity ?? true,
@@ -212,7 +222,9 @@ describe('DevicesService.revoke', () => {
       device: {
         findFirst: async ({ where }: { where: { userId: string } }) =>
           deviceOwner && where.userId === deviceOwner
-            ? { id: 'd1', userId: deviceOwner, publicKey, tunnelIpV4: '10.7.0.2', ...state }
+            ? // `node` is included because revoking has to know which interface
+              // holds the peer.
+              { id: 'd1', userId: deviceOwner, publicKey, tunnelIpV4: '10.7.0.2', node, ...state }
             : null,
         update: async ({ data }: { data: { revokedAt: Date } }) => {
           state.revokedAt = data.revokedAt;
@@ -220,12 +232,21 @@ describe('DevicesService.revoke', () => {
         },
         findMany: async () => [],
       },
-      node: { findFirst: async () => node, findUnique: async () => node },
+      node: { findFirst: async () => node, findUnique: async () => node, count: async () => 1 },
     } as unknown as PrismaService;
 
-    const config = { maxDevicesPerUser: 5, wgInterface: 'wg0', wgReconcileOnBoot: false } as AppConfig;
+    const config = {
+      maxDevicesPerUser: 5,
+      wgInterface: 'wg0',
+      wgReconcileOnBoot: false,
+    } as AppConfig;
     const runner = new FakeWgRunner();
-    const wg = new WireguardService(runner, prisma, new IpAllocatorService(prisma), config);
+    const wg = new WireguardService(
+      new WgRunnerRegistry(runner, config, prisma),
+      prisma,
+      new IpAllocatorService(prisma),
+      config,
+    );
     const service = new DevicesService(prisma, {} as UsersService, {} as NodesService, wg, config);
 
     return { service, runner, publicKey, state };

@@ -52,6 +52,11 @@ export const envSchema = z
     WG_QUICK_BINARY: z.string().default('/usr/bin/wg-quick'),
     WG_RECONCILE_ON_BOOT: boolFromString(true),
 
+    // Which `nodes` row this host's interface actually is. Optional only while a
+    // single node is active — see WgRunnerRegistry. Once a second node exists, the
+    // API cannot infer which interface it owns and refuses to guess.
+    WG_NODE_ID: z.string().uuid('WG_NODE_ID must be a node UUID').optional(),
+
     SEED_NODE_NAME: z.string().default('Mumbai #1'),
     SEED_NODE_REGION: z.string().default('in-mumbai'),
     SEED_NODE_PUBLIC_KEY: z.string().default(''),

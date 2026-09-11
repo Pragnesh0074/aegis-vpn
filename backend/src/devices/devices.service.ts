@@ -89,11 +89,7 @@ export class DevicesService {
    * A P2002 on `publicKey` is NOT retryable — the same key would collide forever — so
    * the two constraint violations are told apart by the error's `meta.target`.
    */
-  private async insertWithRetry(
-    userId: string,
-    node: Node,
-    dto: CreateDeviceDto,
-  ): Promise<Device> {
+  private async insertWithRetry(userId: string, node: Node, dto: CreateDeviceDto): Promise<Device> {
     for (let attempt = 1; attempt <= ALLOCATION_ATTEMPTS; attempt++) {
       const tunnelIpV4 = await this.wg.allocateIp(node);
 
@@ -130,9 +126,7 @@ export class DevicesService {
       }
     }
 
-    throw new InternalServerErrorException(
-      'Could not allocate a tunnel address; please try again',
-    );
+    throw new InternalServerErrorException('Could not allocate a tunnel address; please try again');
   }
 
   /** Prisma reports the violated fields in `meta.target`, as an array or a string. */
@@ -173,8 +167,12 @@ export class DevicesService {
    * The tunnel IP is deliberately not freed — see the soft-delete decision.
    */
   async revoke(userId: string, deviceId: string): Promise<void> {
+    // The node comes along because removing a peer means knowing which interface
+    // holds it — a public key alone does not say, and removing it from the wrong
+    // node would report success while the revoked device kept carrying traffic.
     const device = await this.prisma.device.findFirst({
       where: { id: deviceId, userId },
+      include: { node: true },
     });
 
     // Scoped by userId, so another user's device is indistinguishable from a
@@ -187,7 +185,7 @@ export class DevicesService {
       data: { revokedAt: new Date() },
     });
 
-    await this.wg.revokePeer(device.publicKey);
+    await this.wg.revokePeer(device.publicKey, device.node);
 
     this.logger.log(`Revoked device ${device.id} (${device.tunnelIpV4}) for user ${userId}`);
   }

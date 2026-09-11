@@ -1,5 +1,4 @@
 import {
-  Inject,
   Injectable,
   Logger,
   OnApplicationBootstrap,
@@ -9,7 +8,8 @@ import type { Device, Node } from '@prisma/client';
 import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
 import { IpAllocatorService } from './ip-allocator.service';
-import { WG_RUNNER, type WgPeer, type WgRunner } from './wg-runner';
+import { WgRunnerRegistry } from './wg-runner.registry';
+import type { WgPeer } from './wg-runner';
 import { assertIpInSubnet, assertValidPublicKey } from './wg-validation';
 
 export interface ReconcileReport {
@@ -23,7 +23,7 @@ export class WireguardService implements OnApplicationBootstrap {
   private readonly logger = new Logger(WireguardService.name);
 
   constructor(
-    @Inject(WG_RUNNER) private readonly runner: WgRunner,
+    private readonly runners: WgRunnerRegistry,
     private readonly prisma: PrismaService,
     private readonly allocator: IpAllocatorService,
     private readonly config: AppConfig,
@@ -59,19 +59,35 @@ export class WireguardService implements OnApplicationBootstrap {
     assertValidPublicKey(device.publicKey);
     assertIpInSubnet(device.tunnelIpV4, node.subnetV4);
 
-    await this.runner.addPeer({
+    // Resolved from the node, not from this host. The address was just validated
+    // against this node's subnet, and writing it to a different node's interface
+    // would install a peer nobody can reach.
+    const runner = await this.runners.forNode(node);
+
+    await runner.addPeer({
       publicKey: device.publicKey,
       // /32: a peer may only source traffic from its own address. A wider mask would
       // let one client spoof another's tunnel IP.
       allowedIps: [`${device.tunnelIpV4}/32`],
     });
-    await this.runner.persist();
+    await runner.persist();
   }
 
-  async revokePeer(publicKey: string): Promise<void> {
+  /**
+   * Removes a peer from the node that holds it.
+   *
+   * [node] is required rather than inferred. A public key alone does not say which
+   * interface the peer is on, and removing it from the wrong one would report
+   * success while leaving a revoked device able to carry traffic.
+   */
+  async revokePeer(
+    publicKey: string,
+    node: Pick<Node, 'id' | 'name' | 'agentUrl' | 'agentToken'>,
+  ): Promise<void> {
     assertValidPublicKey(publicKey);
-    await this.runner.removePeer(publicKey);
-    await this.runner.persist();
+    const runner = await this.runners.forNode(node);
+    await runner.removePeer(publicKey);
+    await runner.persist();
   }
 
   allocateIp(node: Node): Promise<string> {
@@ -79,31 +95,39 @@ export class WireguardService implements OnApplicationBootstrap {
   }
 
   /**
-   * Makes the interface match the database.
+   * Makes a node's interface match the database.
    *
    * Postgres is the source of truth: any peer on the interface that is not an active
    * device is removed, and any active device missing from the interface is added. This
-   * is what makes the node disposable — wipe wg0, restart the API, and the fleet is
+   * is what makes a node disposable — wipe its wg0, reconcile, and the fleet is
    * restored.
    *
-   * Only devices on THIS node are considered, so a future multi-node deployment does
-   * not have every API instance fighting over one interface.
+   * Only devices on the target node are considered, so reconciling one node never
+   * touches another's peers. Passing a remote node's id works and goes through its
+   * agent; boot reconciliation deliberately only does this host's own node.
    */
   async reconcile(nodeId?: string): Promise<ReconcileReport> {
-    const node = nodeId
-      ? await this.prisma.node.findUnique({ where: { id: nodeId } })
-      : await this.prisma.node.findFirst({ where: { active: true }, orderBy: { createdAt: 'asc' } });
+    const target = nodeId ?? this.config.wgNodeId;
+
+    const node = target
+      ? await this.prisma.node.findUnique({ where: { id: target } })
+      : await this.prisma.node.findFirst({
+          where: { active: true },
+          orderBy: { createdAt: 'asc' },
+        });
 
     if (!node) {
       throw new ServiceUnavailableException('No node row to reconcile against');
     }
+
+    const runner = await this.runners.forNode(node);
 
     const devices = await this.prisma.device.findMany({
       where: { nodeId: node.id, revokedAt: null },
       select: { publicKey: true, tunnelIpV4: true },
     });
 
-    const live = await this.runner.listPeers();
+    const live = await runner.listPeers();
     const liveByKey = new Map<string, WgPeer>(live.map((p) => [p.publicKey, p]));
     const wanted = new Map(devices.map((d) => [d.publicKey, d]));
 
@@ -121,29 +145,25 @@ export class WireguardService implements OnApplicationBootstrap {
         continue;
       }
 
-      await this.runner.addPeer({ publicKey: device.publicKey, allowedIps: [expected] });
+      await runner.addPeer({ publicKey: device.publicKey, allowedIps: [expected] });
       added++;
     }
 
     let removed = 0;
     for (const peer of live) {
       if (!wanted.has(peer.publicKey)) {
-        await this.runner.removePeer(peer.publicKey);
+        await runner.removePeer(peer.publicKey);
         removed++;
       }
     }
 
-    if (added > 0 || removed > 0) await this.runner.persist();
+    if (added > 0 || removed > 0) await runner.persist();
 
     return { added, removed, unchanged };
   }
 
-  /** Live counters, for a future usage/stats endpoint. */
-  listPeers(): Promise<WgPeer[]> {
-    return this.runner.listPeers();
-  }
-
-  get runnerKind(): 'exec' | 'fake' {
-    return this.runner.kind;
+  /** Live counters for one node, for a future usage/stats endpoint. */
+  async listPeers(node: Pick<Node, 'id' | 'name' | 'agentUrl' | 'agentToken'>): Promise<WgPeer[]> {
+    return (await this.runners.forNode(node)).listPeers();
   }
 }
