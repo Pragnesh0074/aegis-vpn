@@ -7,7 +7,7 @@
 **Scope right now:** backend **done** and one node live. Flutter client **done** and
 **handshaking against the live node**. Next up is the M series: making the control plane
 able to program more than one node. iOS is deliberately deferred.
-**Last updated:** 2026-09-11 (Android tunnel handshaked; multi-region series planned, M0-M1 landed)
+**Last updated:** 2026-09-11 (M0-M1 landed; Frankfurt exit node live and held inactive)
 
 ---
 
@@ -36,50 +36,59 @@ able to program more than one node. iOS is deliberately deferred.
 | F7 | Platform VPN tunnel — iOS (Network Extension) | ⬜ deferred |
 | M0 | Node-aware control plane (`WG_NODE_ID`, per-node runner) | ✅ done |
 | M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
-| M2 | Second node (provision, seed, fleet-aware ops docs) | ⬜ not started |
+| M2 | Second node (Frankfurt) | 🟡 node live, awaiting Mumbai |
 | M3 | What "automatic" means across countries | ⬜ not started |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**M2 — stand up a node in a second country.** Everything above it is done: the
-control plane can now address a node it is not running on, and the agent that
-accepts those calls ships in the same artifact. What is left is operational.
+**Finish M2.** The Frankfurt exit node is built, provisioned and serving its agent.
+The remaining work is all on the Mumbai side, which was unreachable when this was
+done — every port including 80/443 was closed and ICMP was silent, which points at
+a stopped instance rather than a security-group rule.
 
-1. Provision a server in the target country with `ops/provision.sh`, generate its
-   WireGuard keypair, open UDP 51820.
-2. Deploy the same backend tarball and run the **agent** entrypoint under systemd:
-   `ops/aegis-agent.service` plus `ops/agent.env.example` at `/etc/aegis/agent.env`,
-   with `WG_AGENT_TOKEN` set to a fresh 32+ char secret and `AGENT_BIND=127.0.0.1`
-   behind Caddy or a private address. The agent needs no `DATABASE_URL` and no JWT
-   secrets — its schema does not define them, so it cannot read the API's env even
-   if someone copies it over.
-3. Seed the node row with `SEED_NODE_REGION` in `<iso2>-<city>` form — that is what
-   the client parses for the country name and flag — and its own `subnetV4`.
-4. Set `agentUrl` and `agentToken` on that row, and set `WG_NODE_ID` in the API's
-   env to the *Mumbai* node's id — it becomes required as soon as a second node is
-   active. Until the agent columns are set, issuing a peer there fails with a clear
-   error rather than programming the wrong interface.
-5. Verify by connecting from the app and watching for **Protected**, not merely
-   "it connected". An interface that comes up without a handshake is exactly what a
-   misrouted peer looks like.
+### Fleet as it stands
 
-Then **M3**: decide what "automatic" should mean. `selectLeastLoaded()` sorts by free
-slots, which across countries will send a Mumbai user to Frankfurt the moment Frankfurt
-is emptier — under a button the client labels "Fastest available". That label is
-currently a promise the backend does not keep.
+| | Mumbai #1 | Frankfurt #1 |
+|---|---|---|
+| id | `501b27c5-59d2-48ac-a4d1-4e2af3a8a86d` | `a0047e7d-2f56-4370-8776-61170ececf9c` |
+| region | `in-mumbai` | `de-frankfurt` |
+| endpoint | `13.201.194.65:51820` | `3.71.204.118:51820` |
+| subnet | `10.8.0.0/24` | `10.9.0.0/24` |
+| role | control (API + agent-less, programmed locally) | exit (`NODE_ROLE=exit`, agent on :8787) |
+| active | `true` | **`false`** — deliberately |
 
-Also open:
+Frankfurt is held inactive on purpose. Two active nodes while Mumbai still runs
+pre-M0 code means `selectLeastLoaded()` can choose Frankfurt while the peer is
+written to Mumbai's interface, which is the exact silent failure this series
+removes. Activate it only after step 3 below.
 
-- **iOS (F7).** Not started, on purpose — a Network Extension needs a paid
-  organization Apple account. `app/ios/` is the untouched Flutter scaffold. The
-  Dart side is already platform-agnostic: `TunnelChannel` speaks a MethodChannel
-  (`vpn.aegis/tunnel`) and an EventChannel (`vpn.aegis/tunnel/status`), so iOS
-  means answering those two from a `NEPacketTunnelProvider` backed by WireGuardKit,
-  with no change above the channel.
+### To finish, in this order
 
-To continue, say: `Read PROGRESS.md and build M2.`
+1. **Bring Mumbai back** and confirm its public IP is still `13.201.194.65`. If it
+   changed, the `nodes` row endpoint and all four existing peers need updating.
+2. **Deploy M0/M1 to Mumbai** — the commits are local-only, so either push and pull
+   or ship a tarball. `npm ci && npx prisma generate && npm run build`.
+3. **Set `WG_NODE_ID=501b27c5-59d2-48ac-a4d1-4e2af3a8a86d`** in `/etc/aegis/api.env`
+   and restart `aegis-api`. This is required, not optional, the moment Frankfurt goes
+   active.
+4. **Activate Frankfurt**: `update nodes set active = true where region = 'de-frankfurt';`
+5. **Verify from the phone.** Pick Germany, then on the Frankfurt box confirm
+   `sudo wg show wg0` reports a real `latest handshake` for the device's key. An
+   interface that comes up with no handshake is what a misrouted peer looks like,
+   and the app reports that as "Not verified" rather than green.
+
+Then **M3**: decide what "automatic" means now that two countries exist.
+`selectLeastLoaded()` sorts by free slots, so it will send a Mumbai user to
+Frankfurt the moment Frankfurt is emptier — under a button the client labels
+"Fastest available".
+
+Also open: **iOS (F7)**, not started on purpose — a Network Extension needs a paid
+organization Apple account. `app/ios/` is the untouched Flutter scaffold, and the
+Dart side is already platform-agnostic behind `TunnelChannel`.
+
+To continue, say: `Read PROGRESS.md and finish M2.`
 
 ---
 
@@ -89,6 +98,11 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-09-11 | The Frankfurt instance arrived as an **AMI clone of Mumbai** and was rebuilt, not adopted | It carried Mumbai's WireGuard *private* key, Mumbai's four peers, Mumbai's `api.env` (Supabase password + both JWT secrets), Mumbai's SSH key, and a running second `aegis-api` against the same database. A node row built from it would have duplicated Mumbai's public key, leaving clients unable to distinguish the two. Fresh keypair, peers wiped, API disabled, copied secrets deleted; the originals are in `/root/pre-rebuild-backup` |
+| 2026-09-11 | **One tunnel subnet per node**: Mumbai `10.8.0.0/24`, Frankfurt `10.9.0.0/24` | `@@unique([nodeId, tunnelIpV4])` is per-node so overlap would not error, but it makes every log line ambiguous about which country an address belongs to, and rules out node-to-node routing later |
+| 2026-09-11 | `provision.sh` gained `NODE_ROLE` and overridable `TUNNEL_NET` | It assumed one all-in-one box. An exit node must not install PostgreSQL — the database is Supabase and the agent holds no database credentials, so a local one is pure attack surface. Parameterised rather than forked, so the two paths cannot drift |
+| 2026-09-11 | Agent runs **plaintext on `0.0.0.0:8787`, security-group-locked to the API's IP** | Interim, and agreed as such: there is no domain yet, so Caddy cannot obtain a certificate, and the whole API is currently plain HTTP anyway. The bearer token therefore crosses the public internet in the clear. Must move behind TLS before real users — a domain fixes this and the API's HTTP at once |
+| 2026-09-11 | A new node is seeded **`active = false`** and activated last | While the API still runs pre-M0 code, two active nodes let `selectLeastLoaded()` pick the new one while the peer is written to the old one's interface. Activating last makes the dangerous window zero |
 | 2026-09-11 | Remote nodes are programmed by an **agent over HTTP**, not by SSH from the API | An `SshWgRunner` was far less to build, but the API would hold keys with `sudo wg` rights on every exit node, so one API compromise is the whole fleet. The agent keeps the blast radius to one interface |
 | 2026-09-11 | The agent is a **second entrypoint on the backend artifact**, not a separate project | It reuses `ExecWgRunner` and `wg-validation` verbatim rather than reimplementing the one part of this system where a parsing mistake is a security incident. One tarball deploys everywhere |
 | 2026-09-11 | The agent validates its **own narrow environment** — no `DATABASE_URL`, no JWT secrets | Compromising an exit node must yield that node's interface and nothing else. This is the reason the design is not simply "run the whole API on every node" |

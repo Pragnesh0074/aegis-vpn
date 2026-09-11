@@ -12,13 +12,30 @@
 # Idempotent: safe to re-run. It will NOT overwrite an existing wg0.conf or server
 # keypair, because doing so would invalidate every issued peer.
 #
-# Usage:  sudo bash ops/provision.sh
+# Usage:
+#   Control node (API + database on this box, the original layout):
+#     sudo bash ops/provision.sh
+#
+#   Exit node in another country (agent only, no database):
+#     sudo NODE_ROLE=exit TUNNEL_NET=10.9.0.0/24 TUNNEL_SERVER_IP=10.9.0.1 \
+#          TUNNEL_SERVER_IP6=fd42:9::1 bash ops/provision.sh
 #
 set -euo pipefail
 
-TUNNEL_NET="10.7.0.0/24"
-TUNNEL_SERVER_IP="10.7.0.1"
-TUNNEL_SERVER_IP6="fd42:7::1"
+# Overridable, because a fleet needs one subnet per node: overlapping tunnel
+# networks across nodes make logs ambiguous and rule out node-to-node routing
+# later. Mumbai is 10.8.0.0/24, Frankfurt 10.9.0.0/24.
+TUNNEL_NET="${TUNNEL_NET:-10.7.0.0/24}"
+TUNNEL_SERVER_IP="${TUNNEL_SERVER_IP:-10.7.0.1}"
+TUNNEL_SERVER_IP6="${TUNNEL_SERVER_IP6:-fd42:7::1}"
+
+# control = this box runs the API and its database (the original single-node
+#           deployment).
+# exit    = this box only forwards packets and runs the node-agent. It gets no
+#           PostgreSQL at all: the database is elsewhere and the agent holds no
+#           database credentials, so installing one would be pure attack surface.
+NODE_ROLE="${NODE_ROLE:-control}"
+
 WG_PORT="51820"
 WG_MTU="1420"          # Internet path MTU is 1500 on AWS and OCI alike (GCP needs less)
 WG_IF="wg0"
@@ -74,9 +91,12 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
   wireguard wireguard-tools nftables unbound qrencode \
-  postgresql postgresql-contrib \
   iptables-persistent curl git ca-certificates
 ok "packages installed"
+
+if [[ "$NODE_ROLE" == "control" ]]; then
+  apt-get install -y -qq postgresql postgresql-contrib >/dev/null
+fi
 
 # ── IP forwarding ───────────────────────────────────────────────────────────────
 log "Enabling IPv4 forwarding"
@@ -220,35 +240,41 @@ visudo -cf /etc/sudoers.d/aegis-vpnapi >/dev/null
 ok "sudoers rule installed and validated"
 
 # ── PostgreSQL ──────────────────────────────────────────────────────────────────
-log "PostgreSQL"
-systemctl enable --now postgresql >/dev/null 2>&1 || true
-
-DB_PASS_FILE=/etc/aegis/db_password
+# Control node only. An exit node has no database: Supabase holds the fleet, and
+# the agent that programs this interface is given no database credentials.
+DB_PASS="(not installed - exit node)"
 mkdir -p /etc/aegis
-if [[ -f "$DB_PASS_FILE" ]]; then
-  DB_PASS="$(cat "$DB_PASS_FILE")"
-  warn "reusing the existing database password"
-else
-  DB_PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
-  printf '%s' "$DB_PASS" > "$DB_PASS_FILE"
-  chmod 600 "$DB_PASS_FILE"
-fi
+if [[ "$NODE_ROLE" == "control" ]]; then
+  log "PostgreSQL"
+  systemctl enable --now postgresql >/dev/null 2>&1 || true
 
-role_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'")"
-if [[ "$role_exists" == "1" ]]; then
-  sudo -u postgres psql -qc "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}'"
-  ok "role ${DB_USER} exists (password synced)"
-else
-  sudo -u postgres psql -qc "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}'"
-  ok "role ${DB_USER} created"
-fi
+  DB_PASS_FILE=/etc/aegis/db_password
+  mkdir -p /etc/aegis
+  if [[ -f "$DB_PASS_FILE" ]]; then
+    DB_PASS="$(cat "$DB_PASS_FILE")"
+    warn "reusing the existing database password"
+  else
+    DB_PASS="$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+    printf '%s' "$DB_PASS" > "$DB_PASS_FILE"
+    chmod 600 "$DB_PASS_FILE"
+  fi
 
-db_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'")"
-if [[ "$db_exists" == "1" ]]; then
-  ok "database ${DB_NAME} exists"
-else
-  sudo -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
-  ok "database ${DB_NAME} created"
+  role_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'")"
+  if [[ "$role_exists" == "1" ]]; then
+    sudo -u postgres psql -qc "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}'"
+    ok "role ${DB_USER} exists (password synced)"
+  else
+    sudo -u postgres psql -qc "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}'"
+    ok "role ${DB_USER} created"
+  fi
+
+  db_exists="$(sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'")"
+  if [[ "$db_exists" == "1" ]]; then
+    ok "database ${DB_NAME} exists"
+  else
+    sudo -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
+    ok "database ${DB_NAME} created"
+  fi
 fi
 
 # ── Bring up the tunnel ─────────────────────────────────────────────────────────
@@ -343,8 +369,11 @@ $(printf '\033[1;32m')Provisioning complete.$(printf '\033[0m')
   Server public key (put this in SEED_NODE_PUBLIC_KEY):
     $(cat /etc/wireguard/server.pub)
 
+  Role             ${NODE_ROLE}
   DATABASE_URL:
-    postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}?schema=public
+    $(if [[ "$NODE_ROLE" == "control" ]]; then
+        echo "postgresql://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}?schema=public"
+      else echo "none - exit node; the API reaches this box through its agent"; fi)
 
 $(print_cloud_reminders)
 
