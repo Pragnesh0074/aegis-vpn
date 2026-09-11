@@ -1,46 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../tunnel/data/tunnel_channel.dart';
 
 /// Bottom-nav shell for the signed-in app.
 ///
 /// Backed by go_router's `StatefulShellRoute`, so each tab keeps its own
 /// navigation stack and scroll position when the user switches away and back.
-class HomeShell extends StatelessWidget {
+class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The shield tints while the tunnel is up, so the state is legible from any
+    // tab without having to go back to the connect screen.
+    final status = ref.watch(tunnelStatusStreamProvider).value;
+    final isUp = status != null && status.state.isUp;
+
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
-        height: 68.h,
-        selectedIndex: navigationShell.currentIndex,
-        // `initialLocation: true` on a re-tap pops that tab back to its root,
-        // which is the behaviour people expect from a tab bar.
-        onDestinationSelected: (index) => navigationShell.goBranch(
-          index,
-          initialLocation: index == navigationShell.currentIndex,
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: AppColors.outline)),
         ),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.devices_outlined),
-            selectedIcon: Icon(Icons.devices),
-            label: 'Devices',
+        child: NavigationBar(
+          height: 66.h,
+          selectedIndex: navigationShell.currentIndex,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          // `initialLocation: true` on a re-tap pops that tab back to its root,
+          // which is the behaviour people expect from a tab bar.
+          onDestinationSelected: (index) => navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
           ),
-          NavigationDestination(
-            icon: Icon(Icons.dns_outlined),
-            selectedIcon: Icon(Icons.dns),
-            label: 'Servers',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline),
-            selectedIcon: Icon(Icons.person),
-            label: 'Account',
-          ),
-        ],
+          destinations: [
+            NavigationDestination(
+              icon: Icon(
+                isUp ? Icons.shield_rounded : Icons.shield_outlined,
+                color: isUp ? AppColors.accent : null,
+              ),
+              selectedIcon: Icon(
+                Icons.shield_rounded,
+                color: isUp ? AppColors.accent : null,
+              ),
+              label: 'Shield',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.public_outlined),
+              selectedIcon: Icon(Icons.public),
+              label: 'Locations',
+            ),
+            const NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Account',
+            ),
+          ],
+        ),
       ),
     );
   }

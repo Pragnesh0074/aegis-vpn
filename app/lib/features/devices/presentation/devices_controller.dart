@@ -5,68 +5,23 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../nodes/presentation/nodes_providers.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../tunnel/data/tunnel_config_store.dart';
+import '../../tunnel/presentation/vpn_session.dart';
 import '../data/device_key_store.dart';
 import '../data/devices_repository.dart';
-import '../data/wireguard_keygen.dart';
-import '../domain/device_config.dart';
 import 'devices_providers.dart';
 
 part 'devices_controller.g.dart';
 
-/// Mutations on the device list: issuing a peer and revoking one.
+/// Revoking a peer from the device list.
 ///
-/// Reads stay in [devicesProvider]. Keeping them apart means a failed mutation
-/// shows an error without blanking the list the user is looking at.
+/// Issuing one lives in `VpnSession` instead, because it now happens as part of
+/// connecting rather than as its own user-facing step. Reads stay in
+/// [devicesProvider]: keeping them apart means a failed revoke shows an error
+/// without blanking the list the user is looking at.
 @riverpod
 class DevicesController extends _$DevicesController {
   @override
   FutureOr<void> build() {}
-
-  /// Generates a keypair, registers the public half, and stores the private half.
-  ///
-  /// Returns the issued config so the caller can show it once — the node's public
-  /// key and endpoint are not returned by `GET /devices` and cannot be fetched again.
-  Future<DeviceConfig?> addDevice({
-    required String name,
-    required String platform,
-    String? nodeId,
-  }) async {
-    if (state.isLoading) return null;
-    state = const AsyncLoading();
-
-    final result = await AsyncValue.guard(() async {
-      final keys = await ref.read(wireguardKeygenProvider).generate();
-
-      final config = await ref.read(devicesRepositoryProvider).create(
-            publicKey: keys.publicKey,
-            name: name.trim(),
-            platform: platform,
-            nodeId: nodeId,
-          );
-
-      // The peer exists server-side but is useless without its private key. If
-      // the keystore write fails, revoke rather than leave a peer that can never
-      // connect and still counts against the device cap.
-      try {
-        await ref.read(deviceKeyStoreProvider).save(config.deviceId, keys.privateKey);
-        // The peer details come back from this one call and never again, so cache
-        // them now or the tunnel can never be started after this screen closes.
-        await ref.read(tunnelConfigStoreProvider).save(config);
-      } catch (_) {
-        await ref
-            .read(devicesRepositoryProvider)
-            .revoke(config.deviceId)
-            .catchError((_) {});
-        rethrow;
-      }
-
-      _refreshAfterMutation();
-      return config;
-    });
-
-    state = result.hasError ? AsyncError(result.error!, result.stackTrace!) : const AsyncData(null);
-    return result.value;
-  }
 
   /// Revokes the peer, then destroys the local private key.
   ///
@@ -88,11 +43,18 @@ class DevicesController extends _$DevicesController {
     return !result.hasError;
   }
 
-  /// Both mutations change the device count, which the profile screen shows and
-  /// the add-device flow gates on, and the node load figures on the servers tab.
+  /// Revoking changes the device count the account screen shows and the load
+  /// figures on the locations screen.
+  ///
+  /// [provisionedDeviceProvider] matters most: revoking the peer this phone was
+  /// driving must not leave the connect screen believing it still has one, or
+  /// the next tap would try to bring up an interface for a peer the server has
+  /// already forgotten.
   void _refreshAfterMutation() {
-    ref.invalidate(devicesProvider);
-    ref.invalidate(userProfileProvider);
-    ref.invalidate(vpnNodesProvider);
+    ref
+      ..invalidate(devicesProvider)
+      ..invalidate(userProfileProvider)
+      ..invalidate(vpnNodesProvider)
+      ..invalidate(provisionedDeviceProvider);
   }
 }

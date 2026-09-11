@@ -10,16 +10,16 @@ part of 'nodes_providers.dart';
 // ignore_for_file: type=lint, type=warning
 /// The active node fleet.
 ///
-/// `keepAlive` so the picker on the add-device sheet does not re-fetch the list
-/// the servers tab already has.
+/// `keepAlive` so the connect screen's location line does not re-fetch the list
+/// the locations screen already has.
 
 @ProviderFor(vpnNodes)
 final vpnNodesProvider = VpnNodesProvider._();
 
 /// The active node fleet.
 ///
-/// `keepAlive` so the picker on the add-device sheet does not re-fetch the list
-/// the servers tab already has.
+/// `keepAlive` so the connect screen's location line does not re-fetch the list
+/// the locations screen already has.
 
 final class VpnNodesProvider
     extends
@@ -31,8 +31,8 @@ final class VpnNodesProvider
     with $FutureModifier<List<VpnNode>>, $FutureProvider<List<VpnNode>> {
   /// The active node fleet.
   ///
-  /// `keepAlive` so the picker on the add-device sheet does not re-fetch the list
-  /// the servers tab already has.
+  /// `keepAlive` so the connect screen's location line does not re-fetch the list
+  /// the locations screen already has.
   VpnNodesProvider._()
     : super(
         from: null,
@@ -61,51 +61,57 @@ final class VpnNodesProvider
 
 String _$vpnNodesHash() => r'9d9f6e47d1b95bcdf90fdb43930fb2567feb85b6';
 
-/// Nodes grouped by region, for a sectioned list. The API already returns them
-/// ordered by `(region, name)`, so a single pass preserves that order.
+/// The fleet as countries, which is the only shape the locations screen shows.
+///
+/// The API returns nodes ordered by `(region, name)`; that ordering is not
+/// useful once regions are read as countries, so [VpnLocation.group] re-sorts.
 
-@ProviderFor(vpnNodesByRegion)
-final vpnNodesByRegionProvider = VpnNodesByRegionProvider._();
+@ProviderFor(vpnLocations)
+final vpnLocationsProvider = VpnLocationsProvider._();
 
-/// Nodes grouped by region, for a sectioned list. The API already returns them
-/// ordered by `(region, name)`, so a single pass preserves that order.
+/// The fleet as countries, which is the only shape the locations screen shows.
+///
+/// The API returns nodes ordered by `(region, name)`; that ordering is not
+/// useful once regions are read as countries, so [VpnLocation.group] re-sorts.
 
-final class VpnNodesByRegionProvider
+final class VpnLocationsProvider
     extends
         $FunctionalProvider<
-          AsyncValue<Map<String, List<VpnNode>>>,
-          Map<String, List<VpnNode>>,
-          FutureOr<Map<String, List<VpnNode>>>
+          AsyncValue<List<VpnLocation>>,
+          List<VpnLocation>,
+          FutureOr<List<VpnLocation>>
         >
     with
-        $FutureModifier<Map<String, List<VpnNode>>>,
-        $FutureProvider<Map<String, List<VpnNode>>> {
-  /// Nodes grouped by region, for a sectioned list. The API already returns them
-  /// ordered by `(region, name)`, so a single pass preserves that order.
-  VpnNodesByRegionProvider._()
+        $FutureModifier<List<VpnLocation>>,
+        $FutureProvider<List<VpnLocation>> {
+  /// The fleet as countries, which is the only shape the locations screen shows.
+  ///
+  /// The API returns nodes ordered by `(region, name)`; that ordering is not
+  /// useful once regions are read as countries, so [VpnLocation.group] re-sorts.
+  VpnLocationsProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'vpnNodesByRegionProvider',
+        name: r'vpnLocationsProvider',
         isAutoDispose: true,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$vpnNodesByRegionHash();
+  String debugGetCreateSourceHash() => _$vpnLocationsHash();
 
   @$internal
   @override
-  $FutureProviderElement<Map<String, List<VpnNode>>> $createElement(
+  $FutureProviderElement<List<VpnLocation>> $createElement(
     $ProviderPointer pointer,
   ) => $FutureProviderElement(pointer);
 
   @override
-  FutureOr<Map<String, List<VpnNode>>> create(Ref ref) {
-    return vpnNodesByRegion(ref);
+  FutureOr<List<VpnLocation>> create(Ref ref) {
+    return vpnLocations(ref);
   }
 }
 
-String _$vpnNodesByRegionHash() => r'1c054efeceab05d92201c0b81a5ccf49c66dd783';
+String _$vpnLocationsHash() => r'fc07127d2c891f9c1d04bf075bc72835f6fd9b17';

@@ -48,6 +48,25 @@ abstract final class Format {
     return '${size.toStringAsFixed(size >= 10 ? 0 : 1)} ${units[unit]}';
   }
 
+  /// A transfer rate, in the same binary units as [bytes] so the speed and the
+  /// total on the same tile cannot disagree about what a MiB is.
+  static String rate(double bytesPerSecond) {
+    if (bytesPerSecond < 1) return '0 B/s';
+    return '${bytes(bytesPerSecond.round())}/s';
+  }
+
+  /// A tunnel session, as a clock. `h:mm:ss` only once it has been an hour, so a
+  /// fresh connection does not read as `0:00:04`.
+  static String clock(Duration value) {
+    final seconds = value.inSeconds.clamp(0, Duration.secondsPerDay * 999);
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
   /// Long base64 keys are unreadable in a list row; the full value stays
   /// selectable and copyable on the detail screen.
   static String truncateKey(String key, {int head = 10, int tail = 6}) {

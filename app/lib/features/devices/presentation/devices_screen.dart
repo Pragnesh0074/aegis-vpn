@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
@@ -8,34 +8,26 @@ import '../../../core/widgets/detail_row.dart';
 import '../../profile/presentation/profile_providers.dart';
 import '../../tunnel/data/tunnel_config_store.dart';
 import '../domain/device.dart';
-import 'add_device_sheet.dart';
 import 'device_config_screen.dart';
 import 'devices_controller.dart';
 import 'devices_providers.dart';
 import 'widgets/device_tile.dart';
 
-/// `GET /devices`, with add and revoke.
+/// `GET /devices`, with revoke.
+///
+/// There is no add button. Connecting provisions a peer on its own now (see
+/// `VpnSession`), so the only thing left to do here is get rid of one — a peer
+/// issued on a phone the user no longer has, which still counts against the
+/// device cap and can only be freed from this screen.
 class DevicesScreen extends ConsumerWidget {
   const DevicesScreen({super.key});
 
-  Future<void> _add(BuildContext context, WidgetRef ref) async {
-    final config = await AddDeviceSheet.show(context);
-    if (config == null || !context.mounted) return;
-
-    // Straight to the config: this is the only time the server returns the peer's
-    // public key and endpoint.
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => DeviceConfigScreen(config: config, isNew: true),
-      ),
-    );
-  }
-
   /// Reopens the config issued for [device].
   ///
-  /// Only this phone can have it: `GET /devices` withholds the peer details and
-  /// the private key never left the keystore. A miss means the peer was issued
-  /// elsewhere or the app was reinstalled, and no amount of retrying will fix it.
+  /// Only the phone that issued it can have it: `GET /devices` withholds the
+  /// peer details and the private key never left the keystore. A miss means the
+  /// peer was issued elsewhere or the app was reinstalled, and no amount of
+  /// retrying will fix it.
   Future<void> _open(BuildContext context, WidgetRef ref, Device device) async {
     final config = await ref.read(cachedDeviceConfigProvider(device.id).future);
     if (!context.mounted) return;
@@ -47,7 +39,7 @@ class DevicesScreen extends ConsumerWidget {
           title: Text(device.name),
           content: const Text(
             'This device was set up on another phone, so its keys are not stored '
-            'here. Remove it and add a new device to connect from this phone.',
+            'here. Remove it to free a slot, then connect from this phone.',
           ),
           actions: [
             TextButton(
@@ -106,30 +98,25 @@ class DevicesScreen extends ConsumerWidget {
       }
     });
 
-    // The backend enforces the cap with a 409; disabling the button just makes
-    // that outcome visible before the user fills in a form.
-    final atCapacity = profile.value?.hasDeviceCapacity == false;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Devices'),
         actions: [
           if (profile.value case final p?)
             Padding(
-              padding: EdgeInsets.only(right: 16.w),
+              padding: EdgeInsets.only(right: 18.w),
               child: Center(
                 child: Text(
                   '${p.deviceCount}/${p.maxDevices}',
-                  style: Theme.of(context).textTheme.labelLarge,
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: p.hasDeviceCapacity ? AppColors.textMuted : AppColors.danger,
+                  ),
                 ),
               ),
             ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: atCapacity ? null : () => _add(context, ref),
-        icon: const Icon(Icons.add),
-        label: Text(atCapacity ? 'Limit reached' : 'Add device'),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
@@ -144,8 +131,7 @@ class DevicesScreen extends ConsumerWidget {
             if (list.isEmpty) return const _NoDevices();
 
             return ListView.separated(
-              // Clears the extended FAB so the last row is never trapped behind it.
-              padding: EdgeInsets.only(bottom: 96.h),
+              padding: EdgeInsets.only(bottom: 24.h),
               itemCount: list.length,
               separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (_, index) {
@@ -169,24 +155,28 @@ class _NoDevices extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return ListView(
       children: [
         Padding(
           padding: EdgeInsets.all(48.r),
           child: Column(
             children: [
-              Icon(Icons.devices_other, size: 40.r),
+              Icon(Icons.devices_other, size: 38.r, color: AppColors.textMuted),
               Gap.md,
-              Text('No devices yet', style: theme.textTheme.titleSmall),
+              Text(
+                'No devices yet',
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textHigh,
+                ),
+              ),
               Gap.xs,
               Text(
-                'Adding one generates a WireGuard keypair here and registers only '
-                'the public half with the server.',
+                'One is registered automatically the first time you connect. A '
+                'keypair is generated here and only the public half is uploaded.',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
               ),
             ],
           ),

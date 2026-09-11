@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/error/failure_log.dart';
 import '../../devices/data/device_key_store.dart';
 import '../data/tunnel_channel.dart';
 import '../data/tunnel_config_store.dart';
@@ -49,6 +50,7 @@ class TunnelController extends _$TunnelController {
       await ref.read(tunnelConfigStoreProvider).saveSelectedDeviceId(deviceId);
     });
 
+    if (result.hasError) logFailure('connect', result.error!, result.stackTrace!);
     state = result.hasError
         ? AsyncError(result.error!, result.stackTrace!)
         : const AsyncData(null);
@@ -63,6 +65,7 @@ class TunnelController extends _$TunnelController {
       await ref.read(tunnelChannelProvider).disconnect();
     });
 
+    if (result.hasError) logFailure('disconnect', result.error!, result.stackTrace!);
     state = result.hasError
         ? AsyncError(result.error!, result.stackTrace!)
         : const AsyncData(null);

@@ -25,8 +25,11 @@ class AegisApp extends ConsumerWidget {
       builder: (context, child) => MaterialApp.router(
         title: 'Aegis VPN',
         debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
+        // Dark only, and pinned rather than following the system: the connect
+        // screen is built out of glows over a near-black ground, so a light
+        // variant would be a second design rather than a recolour.
+        theme: AppTheme.dark(),
+        themeMode: ThemeMode.dark,
         routerConfig: ref.watch(appRouterProvider),
       ),
     );

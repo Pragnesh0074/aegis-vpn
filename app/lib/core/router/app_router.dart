@@ -42,7 +42,7 @@ GoRouter appRouter(Ref ref) {
       final signedIn = session.requireValue == SessionStatus.authenticated;
 
       if (!signedIn) return onAuthScreen ? null : AppRoutes.login;
-      if (onAuthScreen || location == AppRoutes.splash) return AppRoutes.devices;
+      if (onAuthScreen || location == AppRoutes.splash) return AppRoutes.home;
       return null;
     },
     routes: [

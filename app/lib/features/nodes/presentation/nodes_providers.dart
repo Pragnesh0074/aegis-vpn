@@ -1,25 +1,23 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/nodes_repository.dart';
+import '../domain/vpn_location.dart';
 import '../domain/vpn_node.dart';
 
 part 'nodes_providers.g.dart';
 
 /// The active node fleet.
 ///
-/// `keepAlive` so the picker on the add-device sheet does not re-fetch the list
-/// the servers tab already has.
+/// `keepAlive` so the connect screen's location line does not re-fetch the list
+/// the locations screen already has.
 @Riverpod(keepAlive: true)
 Future<List<VpnNode>> vpnNodes(Ref ref) => ref.watch(nodesRepositoryProvider).list();
 
-/// Nodes grouped by region, for a sectioned list. The API already returns them
-/// ordered by `(region, name)`, so a single pass preserves that order.
+/// The fleet as countries, which is the only shape the locations screen shows.
+///
+/// The API returns nodes ordered by `(region, name)`; that ordering is not
+/// useful once regions are read as countries, so [VpnLocation.group] re-sorts.
 @riverpod
-Future<Map<String, List<VpnNode>>> vpnNodesByRegion(Ref ref) async {
-  final nodes = await ref.watch(vpnNodesProvider.future);
-  final grouped = <String, List<VpnNode>>{};
-  for (final node in nodes) {
-    grouped.putIfAbsent(node.region, () => []).add(node);
-  }
-  return grouped;
+Future<List<VpnLocation>> vpnLocations(Ref ref) async {
+  return VpnLocation.group(await ref.watch(vpnNodesProvider.future));
 }

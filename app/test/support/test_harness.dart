@@ -52,7 +52,7 @@ Future<void> pumpScreen(
         designSize: AegisApp.designSize,
         minTextAdapt: true,
         splitScreenMode: true,
-        builder: (context, _) => MaterialApp(theme: AppTheme.light(), home: child),
+        builder: (context, _) => MaterialApp(theme: AppTheme.dark(), home: child),
       ),
     ),
   );

@@ -8,24 +8,30 @@ part of 'devices_controller.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// Mutations on the device list: issuing a peer and revoking one.
+/// Revoking a peer from the device list.
 ///
-/// Reads stay in [devicesProvider]. Keeping them apart means a failed mutation
-/// shows an error without blanking the list the user is looking at.
+/// Issuing one lives in `VpnSession` instead, because it now happens as part of
+/// connecting rather than as its own user-facing step. Reads stay in
+/// [devicesProvider]: keeping them apart means a failed revoke shows an error
+/// without blanking the list the user is looking at.
 
 @ProviderFor(DevicesController)
 final devicesControllerProvider = DevicesControllerProvider._();
 
-/// Mutations on the device list: issuing a peer and revoking one.
+/// Revoking a peer from the device list.
 ///
-/// Reads stay in [devicesProvider]. Keeping them apart means a failed mutation
-/// shows an error without blanking the list the user is looking at.
+/// Issuing one lives in `VpnSession` instead, because it now happens as part of
+/// connecting rather than as its own user-facing step. Reads stay in
+/// [devicesProvider]: keeping them apart means a failed revoke shows an error
+/// without blanking the list the user is looking at.
 final class DevicesControllerProvider
     extends $AsyncNotifierProvider<DevicesController, void> {
-  /// Mutations on the device list: issuing a peer and revoking one.
+  /// Revoking a peer from the device list.
   ///
-  /// Reads stay in [devicesProvider]. Keeping them apart means a failed mutation
-  /// shows an error without blanking the list the user is looking at.
+  /// Issuing one lives in `VpnSession` instead, because it now happens as part of
+  /// connecting rather than as its own user-facing step. Reads stay in
+  /// [devicesProvider]: keeping them apart means a failed revoke shows an error
+  /// without blanking the list the user is looking at.
   DevicesControllerProvider._()
     : super(
         from: null,
@@ -45,12 +51,14 @@ final class DevicesControllerProvider
   DevicesController create() => DevicesController();
 }
 
-String _$devicesControllerHash() => r'6976265424ad1e3755b3c4813b12be7aeeddfacf';
+String _$devicesControllerHash() => r'e66407b917f709289c19834d5978e164ab443b22';
 
-/// Mutations on the device list: issuing a peer and revoking one.
+/// Revoking a peer from the device list.
 ///
-/// Reads stay in [devicesProvider]. Keeping them apart means a failed mutation
-/// shows an error without blanking the list the user is looking at.
+/// Issuing one lives in `VpnSession` instead, because it now happens as part of
+/// connecting rather than as its own user-facing step. Reads stay in
+/// [devicesProvider]: keeping them apart means a failed revoke shows an error
+/// without blanking the list the user is looking at.
 
 abstract class _$DevicesController extends $AsyncNotifier<void> {
   FutureOr<void> build();

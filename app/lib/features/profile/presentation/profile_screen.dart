@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
@@ -32,6 +34,17 @@ class ProfileScreen extends ConsumerWidget {
               _IdentityCard(profile: data),
               Gap.md,
               _DeviceQuotaCard(profile: data),
+              Gap.md,
+              // The only way to reach the device list now that it is not a tab.
+              // It is a maintenance screen: peers are issued by connecting, so
+              // the reason to come here is to revoke one from a phone that is
+              // gone and free the slot it still occupies.
+              _NavRow(
+                icon: Icons.devices_other,
+                label: 'Devices',
+                trailing: '${data.deviceCount}/${data.maxDevices}',
+                onTap: () => context.go(AppRoutes.devices),
+              ),
               Gap.md,
               const HealthCard(),
               Gap.lg,
@@ -125,8 +138,8 @@ class _DeviceQuotaCard extends StatelessWidget {
             Gap.sm,
             Text(
               profile.hasDeviceCapacity
-                  ? '${profile.remainingDevices} more can be added'
-                  : 'Limit reached — remove a device before adding another',
+                  ? 'Room for ${profile.remainingDevices} more'
+                  : 'Limit reached — remove one below before connecting a new phone',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: profile.hasDeviceCapacity
                     ? theme.colorScheme.onSurfaceVariant
@@ -134,6 +147,55 @@ class _DeviceQuotaCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A tappable row in the account list, styled like the cards around it.
+class _NavRow extends StatelessWidget {
+  const _NavRow({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18.r),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18.r),
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 16.h),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18.r),
+            border: Border.all(color: AppColors.outline),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 19.r, color: AppColors.textMuted),
+              SizedBox(width: 14.w),
+              Expanded(child: Text(label, style: theme.textTheme.titleSmall)),
+              if (trailing case final value?)
+                Text(
+                  value,
+                  style: theme.textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                ),
+              SizedBox(width: 6.w),
+              Icon(Icons.chevron_right, size: 19.r, color: AppColors.textMuted),
+            ],
+          ),
         ),
       ),
     );
