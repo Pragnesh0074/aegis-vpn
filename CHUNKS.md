@@ -45,8 +45,62 @@ end of every chunk with what landed, what is next, and any decisions made along 
 | **C9** | Ops / deploy | `provision.sh`, `add-peer.sh`, systemd unit, `Caddyfile`, deployment runbook | C7 |
 | **C10** | Tests | Unit tests (IP allocator, key validation, config assembly) + e2e smoke test | C8 |
 
-**Backend is complete after C10.** Flutter work is intentionally out of scope for now and
-will get its own chunk series (F0–Fn) later.
+**Backend is complete after C10.** The Flutter client is the F series (F0–F7); going
+multi-country is the M series below.
+
+---
+
+## Multi-region series (M0–M3)
+
+Adding a second country is not a data problem. `Node` already carries its own region,
+subnet, key, endpoint and capacity per row; `GET /nodes` already reports a fleet with
+per-node load; `IpAllocatorService` already allocates inside one node's subnet under a
+`@@unique([nodeId, tunnelIpV4])` guard; and the client already reads regions as
+countries and can switch between them.
+
+It is a control-plane problem, and it is one line wide. `WireguardService.applyPeer`
+takes the chosen node, validates the address against that node's subnet — and then
+calls a single module-scoped runner that shells out to `wg set` on *the host the API is
+running on*. Add a Germany row today and the client is issued a correct-looking Germany
+config whose peer is written to Mumbai's `wg0`. Frankfurt never learns the key, the
+handshake never completes, and the app reports "Not verified" forever.
+
+| ID | Name | What it delivers | Depends on |
+|----|------|------------------|------------|
+| **M0** | Node-aware control plane | `WG_NODE_ID`, per-node runner resolution, `revokePeer`/`reconcile` scoped to a node, and a loud failure for any node the API has no way to reach | C7 |
+| **M1** | Node agent | Agent entrypoint on the same backend artifact, bearer-authenticated peer API, `HttpWgRunner`, `Node.agentUrl`/`agentToken`, systemd unit and env template | M0 |
+| **M2** | Second node | Provision a node in another country, seed its row, wire its agent credentials, make `SERVER-OPS.md` fleet-aware | M1 |
+| **M3** | What "automatic" means | Replace free-slot selection with something defensible once nodes are in different countries | M2 |
+
+### Decisions taken for this series
+
+**An agent, not SSH.** The alternative was an `SshWgRunner` that runs `wg set` over SSH
+— far less to build, but the API would then hold keys with `sudo wg` rights on every
+node in the fleet, so one API compromise is every exit node. The agent keeps the blast
+radius to a single interface.
+
+**The agent is the same artifact, not a second project.** It is a second entrypoint on
+the backend build (`node dist/agent/main`), so it reuses `ExecWgRunner` and
+`wg-validation` verbatim rather than reimplementing the one part of this system where a
+parsing mistake is a security incident. Deploy the same tarball everywhere; the API runs
+one entrypoint and every node runs the other.
+
+**The agent gets no database and no JWT secrets.** It validates its own narrow
+environment — interface, binaries, bearer token, bind address — and nothing else, so
+compromising a node yields control of that node's interface and no more. This is the
+whole reason it is not simply "run the API on every node".
+
+**Locality is explicit.** A node is programmed locally only when its id matches
+`WG_NODE_ID`. Anything else needs an `agentUrl`, and a node with neither fails with a
+clear error rather than silently programming the wrong interface — which is exactly the
+bug this series exists to remove. `WG_NODE_ID` is optional only while the fleet has one
+active node, so the existing single-node deployment keeps working untouched.
+
+**M3 is a product decision, not a refactor.** `selectLeastLoaded()` sorts by free slots,
+which is meaningless across countries — it will route a Mumbai user to Frankfurt the
+moment Frankfurt is emptier, under a button the client labels "Fastest available".
+Nearest (geo-IP at the API), fastest (client-side probing) and least-loaded are three
+different products; it is left open deliberately rather than guessed at.
 
 ---
 

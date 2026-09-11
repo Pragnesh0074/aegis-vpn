@@ -4,9 +4,10 @@
 > exists and what comes next. Update it at the end of every chunk, then commit.
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
-**Scope right now:** backend **done**. Flutter client **done** for every existing API,
-Android VPN tunnel **written but not yet handshaked**. iOS is deliberately deferred.
-**Last updated:** 2026-09-10 (Android tunnel done; iOS deferred, `app/ios` is stock scaffold)
+**Scope right now:** backend **done** and one node live. Flutter client **done** and
+**handshaking against the live node**. Next up is the M series: making the control plane
+able to program more than one node. iOS is deliberately deferred.
+**Last updated:** 2026-09-11 (Android tunnel handshaked; multi-region series planned, M0-M1 landed)
 
 ---
 
@@ -31,44 +32,54 @@ Android VPN tunnel **written but not yet handshaked**. iOS is deliberately defer
 | F3 | Client nodes (`/nodes`) | ✅ done |
 | F4 | Client devices (keygen, issue, list, revoke) | ✅ done |
 | F5 | Client health + tabbed shell | ✅ done |
-| F6 | Platform VPN tunnel — Android (`VpnService` via wireguard-android) | 🟡 builds, never handshaked |
+| F6 | Platform VPN tunnel — Android (`VpnService` via wireguard-android) | ✅ done |
 | F7 | Platform VPN tunnel — iOS (Network Extension) | ⬜ deferred |
+| M0 | Node-aware control plane (`WG_NODE_ID`, per-node runner) | ✅ done |
+| M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
+| M2 | Second node (provision, seed, fleet-aware ops docs) | ⬜ not started |
+| M3 | What "automatic" means across countries | ⬜ not started |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**The backend is complete.** All 11 chunks (C0-C10) are done: 129 tests passing
-(111 unit + 18 e2e), `npm run build` clean, and the full API verified end to end
-against the live Supabase database.
+**M2 — stand up a node in a second country.** Everything above it is done: the
+control plane can now address a node it is not running on, and the agent that
+accepts those calls ships in the same artifact. What is left is operational.
 
-The Flutter client in `app/` integrates every endpoint the API exposes, module by
-module (F0-F5). It is verified two ways: a widget suite that renders every offline
-screen at 320x640 and 430x932 and fails on an overflow, and a live contract suite
-that drives all six repositories against a running backend
-(`flutter test test/integration --tags live --run-skipped`). See `app/README.md`.
+1. Provision a server in the target country with `ops/provision.sh`, generate its
+   WireGuard keypair, open UDP 51820.
+2. Deploy the same backend tarball and run the **agent** entrypoint under systemd:
+   `ops/aegis-agent.service` plus `ops/agent.env.example` at `/etc/aegis/agent.env`,
+   with `WG_AGENT_TOKEN` set to a fresh 32+ char secret and `AGENT_BIND=127.0.0.1`
+   behind Caddy or a private address. The agent needs no `DATABASE_URL` and no JWT
+   secrets — its schema does not define them, so it cannot read the API's env even
+   if someone copies it over.
+3. Seed the node row with `SEED_NODE_REGION` in `<iso2>-<city>` form — that is what
+   the client parses for the country name and flag — and its own `subnetV4`.
+4. Set `agentUrl` and `agentToken` on that row, and set `WG_NODE_ID` in the API's
+   env to the *Mumbai* node's id — it becomes required as soon as a second node is
+   active. Until the agent columns are set, issuing a peer there fails with a clear
+   error rather than programming the wrong interface.
+5. Verify by connecting from the app and watching for **Protected**, not merely
+   "it connected". An interface that comes up without a handshake is exactly what a
+   misrouted peer looks like.
 
-What is left before this is a product:
+Then **M3**: decide what "automatic" should mean. `selectLeastLoaded()` sorts by free
+slots, which across countries will send a Mumbai user to Frankfurt the moment Frankfurt
+is emptier — under a button the client labels "Fastest available". That label is
+currently a promise the backend does not keep.
 
-0. **Handshake the Android tunnel against the live node.** F6 compiles and the APK
-   builds, but no client has ever completed a handshake — nothing in the test suite
-   touches `TunnelBridge.kt`, and it has never been run on a physical device. Until
-   `sudo wg show wg0` reports a `latest handshake` for the phone's public key and
-   traffic actually egresses, the Android tunnel is unproven, not done.
+Also open:
 
-1. ~~Deploy~~ **Done.** The node is live at `13.201.194.65` (EC2, ap-south-1):
-   `wg0` up on 51820, `WG_RUNNER=exec`, `ip_forward=1`, and peers the API added
-   present in `wg show`. So `ExecWgRunner` *has* run against a real `wg` binary and
-   `provision.sh` *has* been executed — the old "never run" note here was stale.
-   Operating instructions are in `docs/SERVER-OPS.md`.
-2. **iOS (F7).** Not started, on purpose — a Network Extension needs a paid
-   organization Apple account. `app/ios/` is the untouched Flutter scaffold. The
-   Dart side is already platform-agnostic: `TunnelChannel` speaks a MethodChannel
-   (`vpn.aegis/tunnel`) and an EventChannel (`vpn.aegis/tunnel/status`), so iOS
-   means answering those two from a `NEPacketTunnelProvider` backed by WireGuardKit,
-   with no change above the channel.
+- **iOS (F7).** Not started, on purpose — a Network Extension needs a paid
+  organization Apple account. `app/ios/` is the untouched Flutter scaffold. The
+  Dart side is already platform-agnostic: `TunnelChannel` speaks a MethodChannel
+  (`vpn.aegis/tunnel`) and an EventChannel (`vpn.aegis/tunnel/status`), so iOS
+  means answering those two from a `NEPacketTunnelProvider` backed by WireGuardKit,
+  with no change above the channel.
 
-To continue the client, say: `Read PROGRESS.md and build F7.`
+To continue, say: `Read PROGRESS.md and build M2.`
 
 ---
 
@@ -78,6 +89,13 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-09-11 | Remote nodes are programmed by an **agent over HTTP**, not by SSH from the API | An `SshWgRunner` was far less to build, but the API would hold keys with `sudo wg` rights on every exit node, so one API compromise is the whole fleet. The agent keeps the blast radius to one interface |
+| 2026-09-11 | The agent is a **second entrypoint on the backend artifact**, not a separate project | It reuses `ExecWgRunner` and `wg-validation` verbatim rather than reimplementing the one part of this system where a parsing mistake is a security incident. One tarball deploys everywhere |
+| 2026-09-11 | The agent validates its **own narrow environment** — no `DATABASE_URL`, no JWT secrets | Compromising an exit node must yield that node's interface and nothing else. This is the reason the design is not simply "run the whole API on every node" |
+| 2026-09-11 | A node is programmed locally **only if its id matches `WG_NODE_ID`**; anything else needs an `agentUrl`, and a node with neither throws | The bug this series removes is silent misprogramming — issuing a valid-looking Germany config whose peer lands on Mumbai's `wg0`. Failing loudly is the whole point |
+| 2026-09-11 | `WG_NODE_ID` is **optional while exactly one node is active** | Keeps the running single-node deployment working untouched; it becomes required the moment a second node exists, which is exactly when ambiguity would start to matter |
+| 2026-09-11 | Agent credentials (`agentUrl`, `agentToken`) live on the **node row**, not in env | Per-node tokens can be rotated independently without redeploying the API, and adding a node is then a data change. The trade-off accepted: a database compromise exposes every agent token — but that database already holds refresh-token hashes and is game over regardless |
+| 2026-09-11 | Peer removal is `POST /peers/remove`, not `DELETE /peers/:key` | A WireGuard public key is base64 and contains `/`, `+` and `=`. Putting it in a path segment invites proxy and encoding bugs on the one call whose failure silently leaves a revoked peer live |
 | 2026-09-09 | ~~Host: Oracle Cloud Always Free, Ampere A1 ARM, Mumbai~~ | superseded 2026-09-10 |
 | 2026-09-10 | **Host: AWS EC2** (Graviton ARM64), user's choice | Ops layer is now provider-agnostic; `provision.sh` detects the cloud from the metadata service and prints provider-specific prerequisites. **No application code changed** — the API never knew which cloud it was on |
 | 2026-09-10 | AWS **source/destination check must be disabled** — the one mandatory AWS-only step | EC2 silently discards forwarded packets otherwise. Symptom is a successful handshake followed by no traffic, which looks identical to an MTU or NAT fault. Cannot be set from inside the instance, so the script can only remind |
