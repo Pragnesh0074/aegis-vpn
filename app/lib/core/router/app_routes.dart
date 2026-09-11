@@ -19,6 +19,12 @@ abstract final class AppRoutes {
   static const devicesSegment = 'devices';
   static const devices = '$account/$devicesSegment';
 
+  /// Also under the account tab. The kill switch needs a page rather than a
+  /// row with a switch on it, because what it does and does not cover takes
+  /// more than a subtitle to say honestly.
+  static const killSwitchSegment = 'kill-switch';
+  static const killSwitch = '$account/$killSwitchSegment';
+
   // The issued-config screen has no path on purpose. It is pushed with the config
   // object itself, which has no id the server would return again — a URL for it
   // could never be reopened.

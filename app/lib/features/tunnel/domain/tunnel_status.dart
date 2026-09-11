@@ -58,6 +58,7 @@ class TunnelStatus {
     this.deviceId,
     this.stats = TunnelStats.zero,
     this.error,
+    this.killSwitch = false,
   });
 
   final TunnelState state;
@@ -68,6 +69,14 @@ class TunnelStatus {
 
   /// Why the last connect attempt failed, for display. Null unless it did.
   final String? error;
+
+  /// Whether the platform will rebuild this tunnel if it drops on its own.
+  ///
+  /// Read from the native layer rather than from the app's own preference, so
+  /// the UI reports what is actually armed. The two can disagree: the setting is
+  /// applied to the platform on launch, and until that lands the stored
+  /// preference is a promise rather than a fact.
+  final bool killSwitch;
 
   static const disconnected = TunnelStatus(state: TunnelState.disconnected);
 
@@ -92,6 +101,7 @@ class TunnelStatus {
         },
       ),
       error: json['error'] as String?,
+      killSwitch: json['killSwitch'] as bool? ?? false,
     );
   }
 }

@@ -91,6 +91,35 @@ class TunnelChannel {
       throw TunnelException(e.message ?? 'The tunnel could not be stopped.');
     }
   }
+
+  /// Arms or disarms the platform's rebuild-on-drop behaviour.
+  ///
+  /// The flag lives natively because the drops worth surviving are the ones
+  /// where this isolate is not running. It does not block traffic while the
+  /// tunnel is down — only Android can, via [openVpnSettings].
+  Future<void> setKillSwitch({required bool enabled}) async {
+    try {
+      await _methods.invokeMethod<void>('setKillSwitch', {'enabled': enabled});
+    } on PlatformException catch (e) {
+      throw TunnelException(e.message ?? 'The kill switch could not be changed.');
+    }
+  }
+
+  /// Opens Android's VPN settings, where "Block connections without VPN" lives.
+  ///
+  /// That switch is the only thing that actually stops traffic when no tunnel is
+  /// up, and Android does not let an app enable it for itself — so this hands the
+  /// user to the right screen instead of pretending to do it for them.
+  ///
+  /// False when the device has no VPN settings activity to open, which some OEM
+  /// builds genuinely do not.
+  Future<bool> openVpnSettings() async {
+    try {
+      return await _methods.invokeMethod<bool>('openVpnSettings') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
 }
 
 @Riverpod(keepAlive: true)

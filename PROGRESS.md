@@ -7,7 +7,7 @@
 **Scope right now:** backend **done** and one node live. Flutter client **done** and
 **handshaking against the live node**. Next up is the M series: making the control plane
 able to program more than one node. iOS is deliberately deferred.
-**Last updated:** 2026-09-11 (M2 done — two countries live, peer issuance verified on the correct interface)
+**Last updated:** 2026-09-11 (M2 done; kill switch shipped client-side, no backend involvement)
 
 ---
 
@@ -38,6 +38,7 @@ able to program more than one node. iOS is deliberately deferred.
 | M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
 | M2 | Second node (Frankfurt) | ✅ done |
 | M3 | What "automatic" means across countries | ⬜ not started |
+| K1 | Kill switch (auto-reconnect + system lockdown guidance) | ✅ done |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
@@ -104,6 +105,12 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-09-11 | The kill switch is **client-only; the backend has no part in it** | It is a device-local network policy. No endpoint, table or config would make it work, and syncing the preference across a user's devices is arguably wrong — lockdown on a phone does not imply lockdown on a laptop. An endpoint was not added rather than invent a backend role for a client feature |
+| 2026-09-11 | On Android an app **cannot** block traffic while the tunnel is down, so the feature is split in two | Only the system's "Block connections without VPN" does that, and it is deliberately not app-settable. Aegis therefore ships rebuild-on-drop, which it can do, and hands the user to VPN settings for the part it cannot. The screen says which is which — a toggle labelled "kill switch" that silently only reconnects would let someone believe they were covered with the app closed |
+| 2026-09-11 | Rebuild-on-drop lives in `TunnelBridge`, not in Dart | The drops worth surviving are the ones where the Dart isolate is not running: app backgrounded, engine suspended, OS reclaiming the interface. A reconnect loop in the UI layer only works while someone is watching it |
+| 2026-09-11 | Reconnect is capped at 5 attempts with 1-16s backoff, and the last config is held **in memory only** | A revoked peer or withdrawn consent would otherwise retry until the battery died. Persisting the config would mean writing a WireGuard private key to a second place on disk; the keystore stays its only durable home, at the cost of not surviving process death |
+| 2026-09-11 | `GoBackend.setAlwaysOnCallback` is registered | Android can start the VpnService itself once always-on is enabled. Without answering that callback the tunnel would never be established, and a user who had also ticked "block connections" would be left with no network at all — the worst possible outcome of switching on a kill switch |
+| 2026-09-11 | The connect screen badge reads "Auto-reconnect", not a shield | It does not block traffic. A shield next to "Not protected" would imply the opposite of what is true |
 | 2026-09-11 | The Frankfurt instance arrived as an **AMI clone of Mumbai** and was rebuilt, not adopted | It carried Mumbai's WireGuard *private* key, Mumbai's four peers, Mumbai's `api.env` (Supabase password + both JWT secrets), Mumbai's SSH key, and a running second `aegis-api` against the same database. A node row built from it would have duplicated Mumbai's public key, leaving clients unable to distinguish the two. Fresh keypair, peers wiped, API disabled, copied secrets deleted; the originals are in `/root/pre-rebuild-backup` |
 | 2026-09-11 | **One tunnel subnet per node**: Mumbai `10.8.0.0/24`, Frankfurt `10.9.0.0/24` | `@@unique([nodeId, tunnelIpV4])` is per-node so overlap would not error, but it makes every log line ambiguous about which country an address belongs to, and rules out node-to-node routing later |
 | 2026-09-11 | `provision.sh` gained `NODE_ROLE` and overridable `TUNNEL_NET` | It assumed one all-in-one box. An exit node must not install PostgreSQL — the database is Supabase and the agent holds no database credentials, so a local one is pure attack surface. Parameterised rather than forked, so the two paths cannot drift |

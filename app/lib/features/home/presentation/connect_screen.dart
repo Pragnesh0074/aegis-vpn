@@ -56,10 +56,21 @@ class ConnectScreen extends ConsumerWidget {
                       children: [
                         const _Header(),
                         SizedBox(height: 12.h),
-                        _StatePill(
-                          phase: phase,
-                          uptime: uptime,
-                          isUp: status.state.isUp,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _StatePill(
+                              phase: phase,
+                              uptime: uptime,
+                              isUp: status.state.isUp,
+                            ),
+                            // Only when the platform actually has it armed, not
+                            // when the preference merely says so.
+                            if (status.killSwitch) ...[
+                              SizedBox(width: 8.w),
+                              const _KillSwitchChip(),
+                            ],
+                          ],
                         ),
                         SizedBox(height: 20.h),
                         ConnectOrb(
@@ -260,6 +271,42 @@ class _StatePill extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown when the platform will rebuild a dropped tunnel.
+///
+/// Deliberately says "auto-reconnect" rather than "protected": it does not block
+/// traffic while the tunnel is down, and a shield-shaped badge next to
+/// "Not protected" would imply otherwise.
+class _KillSwitchChip extends StatelessWidget {
+  const _KillSwitchChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 7.h),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(100.r),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.autorenew, size: 12.r, color: AppColors.textMuted),
+          SizedBox(width: 6.w),
+          Text(
+            'Auto-reconnect',
+            style: TextStyle(
+              fontSize: 11.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMuted,
+            ),
+          ),
+        ],
       ),
     );
   }

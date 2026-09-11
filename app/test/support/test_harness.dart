@@ -1,6 +1,7 @@
 import 'package:aegis_vpn/app.dart';
 import 'package:aegis_vpn/core/storage/secure_store.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Riverpod 3 keeps `Override` out of the main export; it lives in misc.dart.
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -23,6 +24,32 @@ class InMemorySecureStore implements SecureStore {
   Future<void> delete(String key) async => values.remove(key);
 }
 
+/// Answers the tunnel MethodChannel with a platform that has no tunnel.
+///
+/// Without this, any `invokeMethod` in a widget test never completes: with no
+/// mock handler the call is forwarded to a platform that is not there, so the
+/// future hangs and `pumpAndSettle` times out behind a spinner rather than
+/// failing on anything informative. The EventChannel is deliberately left
+/// unmocked — subscribing does not await a reply, and a stream that never emits
+/// is exactly what a test device looks like.
+void stubTunnelChannel() {
+  const channel = MethodChannel('vpn.aegis/tunnel');
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(channel, (call) async {
+    return switch (call.method) {
+      'status' => <String, Object?>{'state': 'disconnected', 'killSwitch': false},
+      // Accepted but inert: nothing here brings a tunnel up.
+      'connect' || 'disconnect' || 'setKillSwitch' => null,
+      'openVpnSettings' => true,
+      _ => null,
+    };
+  });
+  addTearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null),
+  );
+}
+
 /// Pumps [child] inside the same `ScreenUtilInit` the real app uses.
 ///
 /// Without it every `.w` / `.h` / `.sp` in the widget tree throws, so this is
@@ -41,6 +68,8 @@ Future<void> pumpScreen(
     ..devicePixelRatio = 1.0
     ..physicalSize = surfaceSize;
   addTearDown(tester.view.reset);
+
+  stubTunnelChannel();
 
   await tester.pumpWidget(
     ProviderScope(

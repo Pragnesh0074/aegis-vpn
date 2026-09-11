@@ -5,6 +5,7 @@ import 'package:aegis_vpn/features/devices/domain/device.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/devices/presentation/device_config_screen.dart';
 import 'package:aegis_vpn/features/home/presentation/connect_screen.dart';
+import 'package:aegis_vpn/features/killswitch/presentation/kill_switch_screen.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
 import 'package:aegis_vpn/features/nodes/presentation/locations_screen.dart';
 import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
@@ -124,6 +125,9 @@ void main() {
         expect(find.text('Upload'), findsOneWidget);
         expect(find.text('0 B/s'), findsNWidgets(2));
 
+        // No kill switch reported by the platform, so no badge claiming one.
+        expect(find.text('Auto-reconnect'), findsNothing);
+
         // Automatic with no stored choice, resolved to the emptiest node so the
         // card names a country rather than just saying "Automatic".
         expect(find.text('Germany'), findsOneWidget);
@@ -184,9 +188,47 @@ void main() {
 
           expect(find.text(scenario.headline), findsOneWidget);
           expect(find.textContaining(scenario.detail), findsOneWidget);
+          if (scenario.extraText case final extra?) {
+            expect(find.text(extra), findsOneWidget);
+          }
           expect(tester.takeException(), isNull);
         });
       }
+
+      testWidgets('kill switch screen says what it does not cover', (tester) async {
+        await pumpScreen(
+          tester,
+          const KillSwitchScreen(),
+          surfaceSize: entry.value,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Rebuild the tunnel if it drops'), findsOneWidget);
+        // Defaults to off, and the stubbed platform reports it disarmed.
+        expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+
+        // The honesty this screen exists for: an app cannot block traffic on
+        // Android, so the page must say who can. Below the fold on a small
+        // phone, so scroll rather than assert on whatever happens to fit.
+        Future<void> scrollTo(Finder finder) => tester.scrollUntilVisible(
+              finder,
+              300,
+              scrollable: find.byType(Scrollable).first,
+            );
+
+        await scrollTo(find.textContaining('Only Android can stop traffic'));
+        expect(find.text('Block all traffic without a VPN'), findsOneWidget);
+        expect(find.textContaining('Only Android can stop traffic'), findsOneWidget);
+
+        await scrollTo(find.text('While disconnected'));
+        expect(find.text('While disconnected'), findsOneWidget);
+        expect(
+          find.textContaining('Traffic uses your normal connection'),
+          findsOneWidget,
+        );
+
+        expect(tester.takeException(), isNull);
+      });
 
       testWidgets('device config shows every field the API returned', (tester) async {
         await pumpScreen(
@@ -308,6 +350,7 @@ class _LiveState {
     required this.status,
     required this.headline,
     required this.detail,
+    this.extraText,
   });
 
   final String name;
@@ -316,6 +359,9 @@ class _LiveState {
 
   /// A substring, because the handshake line carries a relative time.
   final String detail;
+
+  /// Anything else that must appear for this state.
+  final String? extraText;
 }
 
 /// Interface up, nothing ever received from the peer. The case a green badge
@@ -328,6 +374,23 @@ const _noHandshakeYet = TunnelStatus(
 );
 
 final _liveStates = [
+  _LiveState(
+    name: 'connected with the kill switch armed',
+    status: TunnelStatus(
+      state: TunnelState.connected,
+      deviceId: 'd1',
+      killSwitch: true,
+      stats: TunnelStats(
+        rxBytes: 1024,
+        txBytes: 1024,
+        lastHandshake: DateTime.now(),
+      ),
+    ),
+    headline: 'Protected',
+    detail: 'Handshake',
+    // Never "protected" wording on the badge: it does not block traffic.
+    extraText: 'Auto-reconnect',
+  ),
   _LiveState(
     name: 'connected and handshaking',
     status: TunnelStatus(

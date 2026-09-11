@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
 import '../../devices/presentation/devices_screen.dart';
+import '../../killswitch/presentation/kill_switch_screen.dart';
 import '../../nodes/presentation/locations_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 import 'connect_screen.dart';
@@ -38,6 +39,10 @@ List<RouteBase> buildHomeRoutes() {
                 GoRoute(
                   path: AppRoutes.devicesSegment,
                   builder: (_, _) => const DevicesScreen(),
+                ),
+                GoRoute(
+                  path: AppRoutes.killSwitchSegment,
+                  builder: (_, _) => const KillSwitchScreen(),
                 ),
               ],
             ),

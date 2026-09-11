@@ -2,6 +2,7 @@ package com.aegisvpn.aegis_vpn
 
 import android.app.Activity
 import android.content.Intent
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import com.wireguard.android.backend.Backend
@@ -36,6 +37,18 @@ class TunnelBridge(
 
         /** Matches WireGuard's own rehandshake cadence closely enough to look live. */
         const val STATS_POLL_MS = 1_000L
+
+        /**
+         * How many times the kill switch rebuilds a tunnel that went down on its
+         * own before giving up.
+         *
+         * Bounded on purpose. A tunnel that cannot come up — a revoked peer, a
+         * withdrawn VPN consent, a node that is gone — would otherwise retry for
+         * as long as the phone is on, and a VPN app that flattens the battery is
+         * worse than one that admits defeat.
+         */
+        const val RECONNECT_ATTEMPTS = 5
+        const val RECONNECT_BASE_DELAY_MS = 1_000L
     }
 
     private val methods = MethodChannel(messenger, METHOD_CHANNEL).apply {
@@ -45,7 +58,17 @@ class TunnelBridge(
         setStreamHandler(this@TunnelBridge)
     }
 
-    private val backend: Backend by lazy { GoBackend(activity.applicationContext) }
+    private val backend: Backend by lazy {
+        GoBackend(activity.applicationContext).also {
+            // Fires when Android starts the service as an always-on VPN. Without
+            // this the tunnel would never be established, and a user who had also
+            // ticked "Block connections without VPN" would be left with no
+            // network at all — the worst possible outcome of enabling a kill
+            // switch. Only helps while this process holds a config; see
+            // [lastConfig].
+            GoBackend.setAlwaysOnCallback { main.post { maybeReconnect() } }
+        }
+    }
     private val main = Handler(Looper.getMainLooper())
 
     // setState blocks while the Go backend brings the interface up, so it must
@@ -66,6 +89,40 @@ class TunnelBridge(
     private var pendingConnect: (() -> Unit)? = null
     private var pendingResult: MethodChannel.Result? = null
 
+    /**
+     * Kill switch: rebuild the tunnel whenever it goes down without the user
+     * asking.
+     *
+     * Lives here rather than in Dart because the cases worth surviving are the
+     * ones where Dart is not running — the app backgrounded, the engine
+     * suspended, the OS reclaiming the interface. A reconnect loop in the UI
+     * layer would only work while someone was looking at it.
+     *
+     * Note what this is NOT: it cannot block traffic while the tunnel is down.
+     * Only Android can do that, through "Block connections without VPN" in
+     * system VPN settings, which no app is allowed to enable for itself. See
+     * [openVpnSettings].
+     */
+    @Volatile
+    private var killSwitch = false
+
+    /**
+     * The last config that was brought up, kept so the kill switch has something
+     * to re-establish.
+     *
+     * Memory only. Persisting it would mean writing a WireGuard private key to a
+     * second place on disk, and the keystore on the Dart side is deliberately the
+     * only durable home for it. The cost is that a reconnect cannot survive the
+     * process being killed.
+     */
+    private var lastConfig: Config? = null
+
+    /** True while the current teardown was asked for, so it is not undone. */
+    @Volatile
+    private var userRequestedDown = false
+
+    private var reconnectAttempt = 0
+
     private val tunnel = object : Tunnel {
         override fun getName() = "aegis"
 
@@ -73,8 +130,69 @@ class TunnelBridge(
             // Fires for changes the app did not initiate, which is the whole reason
             // status is pushed rather than polled.
             state = newState
-            main.post { pollStats() }
+            main.post {
+                pollStats()
+                if (newState == Tunnel.State.UP) {
+                    // A tunnel that came up is the only proof the retry budget
+                    // should be refilled.
+                    reconnectAttempt = 0
+                } else if (newState == Tunnel.State.DOWN) {
+                    maybeReconnect()
+                }
+            }
         }
+    }
+
+    private val reconnect = Runnable { attemptReconnect() }
+
+    /**
+     * Rebuilds a tunnel that dropped on its own, if the kill switch is on.
+     *
+     * Deliberately silent about the cases it cannot help with: a teardown the
+     * user asked for, a config it never saw, and consent that has been withdrawn
+     * — reconnecting the last of those needs an activity to show the system
+     * dialog, which is not available from a background state change.
+     */
+    private fun maybeReconnect() {
+        if (!killSwitch || userRequestedDown) return
+        if (lastConfig == null) return
+        if (reconnectAttempt >= RECONNECT_ATTEMPTS) return
+        if (GoBackend.VpnService.prepare(activity) != null) {
+            // Consent is gone. Retrying would fail identically every time, and
+            // the UI already reports the tunnel as down.
+            return
+        }
+
+        // Backs off 1s, 2s, 4s, 8s, 16s. A node that is briefly unreachable
+        // recovers on the first try; one that is gone stops being hammered.
+        val delay = RECONNECT_BASE_DELAY_MS shl reconnectAttempt
+        reconnectAttempt++
+        main.removeCallbacks(reconnect)
+        main.postDelayed(reconnect, delay)
+    }
+
+    private fun attemptReconnect() {
+        val config = lastConfig ?: return
+        if (!killSwitch || userRequestedDown || state == Tunnel.State.UP) return
+
+        worker.execute {
+            try {
+                backend.setState(tunnel, Tunnel.State.UP, config)
+            } catch (e: Exception) {
+                state = Tunnel.State.DOWN
+                main.post {
+                    pollStats()
+                    // Schedule the next attempt from here: a throwing setState
+                    // may never reach onStateChange, so the chain would stop.
+                    maybeReconnect()
+                }
+            }
+        }
+    }
+
+    private fun cancelReconnect() {
+        main.removeCallbacks(reconnect)
+        reconnectAttempt = 0
     }
 
     private val statsPoll = Runnable { pollStats() }
@@ -105,6 +223,26 @@ class TunnelBridge(
             "status" -> result.success(snapshot())
             "connect" -> connect(call, result)
             "disconnect" -> disconnect(result)
+            "setKillSwitch" -> {
+                killSwitch = call.argument<Boolean>("enabled") == true
+                if (!killSwitch) cancelReconnect()
+                emit()
+                result.success(null)
+            }
+            // Android's real kill switch. An app cannot turn this on for itself,
+            // by design, so the most it can do is take the user to the screen.
+            "openVpnSettings" -> {
+                try {
+                    activity.startActivity(
+                        Intent(Settings.ACTION_VPN_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    result.success(true)
+                } catch (e: Exception) {
+                    // Some OEM builds ship no VPN settings activity at all.
+                    result.success(false)
+                }
+            }
             else -> result.notImplemented()
         }
     }
@@ -117,6 +255,9 @@ class TunnelBridge(
             return
         }
         deviceId = call.argument<String>("deviceId")
+        lastConfig = config
+        userRequestedDown = false
+        cancelReconnect()
 
         val start = {
             worker.execute {
@@ -148,6 +289,12 @@ class TunnelBridge(
     }
 
     private fun disconnect(result: MethodChannel.Result) {
+        // Set before the call, not after: onStateChange can land while setState
+        // is still running, and the kill switch would otherwise race in and
+        // rebuild the tunnel the user just asked to drop.
+        userRequestedDown = true
+        cancelReconnect()
+
         worker.execute {
             try {
                 backend.setState(tunnel, Tunnel.State.DOWN, null)
@@ -231,6 +378,7 @@ class TunnelBridge(
             "rxBytes" to rx,
             "txBytes" to tx,
             "lastHandshakeEpochSeconds" to handshake / 1000,
+            "killSwitch" to killSwitch,
         )
     }
 

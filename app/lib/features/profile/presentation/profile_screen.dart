@@ -10,6 +10,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../health/presentation/widgets/health_card.dart';
+import '../../killswitch/presentation/kill_switch_controller.dart';
 import '../domain/user_profile.dart';
 import 'profile_providers.dart';
 
@@ -45,6 +46,8 @@ class ProfileScreen extends ConsumerWidget {
                 trailing: '${data.deviceCount}/${data.maxDevices}',
                 onTap: () => context.go(AppRoutes.devices),
               ),
+              Gap.md,
+              const _KillSwitchRow(),
               Gap.md,
               const HealthCard(),
               Gap.lg,
@@ -149,6 +152,22 @@ class _DeviceQuotaCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Kill switch entry, showing whether it is on without opening the page.
+class _KillSwitchRow extends ConsumerWidget {
+  const _KillSwitchRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(killSwitchControllerProvider).value ?? false;
+    return _NavRow(
+      icon: Icons.shield_outlined,
+      label: 'Kill switch',
+      trailing: enabled ? 'On' : 'Off',
+      onTap: () => context.go(AppRoutes.killSwitch),
     );
   }
 }
