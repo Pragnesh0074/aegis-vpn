@@ -54,6 +54,12 @@ class TunnelBridge(
 
     private var sink: EventChannel.EventSink? = null
     private var deviceId: String? = null
+
+    // Written from the worker thread (a failed setState) and from whichever
+    // thread the backend reports a state change on, then read by the poll loop
+    // on main. Without @Volatile the loop can read a stale DOWN and stop
+    // polling a tunnel that is actually up.
+    @Volatile
     private var state = Tunnel.State.DOWN
 
     /** Held while the system consent dialog is up, so the connect can resume after. */
@@ -67,16 +73,31 @@ class TunnelBridge(
             // Fires for changes the app did not initiate, which is the whole reason
             // status is pushed rather than polled.
             state = newState
-            main.post { emit() }
+            main.post { pollStats() }
         }
     }
 
-    private val statsPoll = object : Runnable {
-        override fun run() {
-            if (sink == null) return
-            emit()
-            if (state == Tunnel.State.UP) main.postDelayed(this, STATS_POLL_MS)
-        }
+    private val statsPoll = Runnable { pollStats() }
+
+    /**
+     * Emits a snapshot and, while the interface is up, schedules the next one.
+     *
+     * Idempotent — it clears any pending run first — so calling it on every
+     * state change cannot leave two loops racing each other.
+     *
+     * It has to be re-entered on each state change rather than started once on
+     * subscribe. The app subscribes at launch, when the tunnel is down, so a
+     * loop that only began in [onListen] emitted once, declined to reschedule,
+     * and died. The tunnel would then come up and report a single snapshot taken
+     * before the first handshake had completed, leaving the UI on "up but the
+     * peer has not replied" for the whole session with its transfer counters
+     * frozen at zero.
+     */
+    private fun pollStats() {
+        main.removeCallbacks(statsPoll)
+        if (sink == null) return
+        emit()
+        if (state == Tunnel.State.UP) main.postDelayed(statsPoll, STATS_POLL_MS)
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -105,7 +126,7 @@ class TunnelBridge(
                 } catch (e: Exception) {
                     state = Tunnel.State.DOWN
                     main.post {
-                        emit()
+                        pollStats()
                         result.error("connect_failed", e.message ?: "The tunnel failed to start.", null)
                     }
                 }
@@ -152,7 +173,7 @@ class TunnelBridge(
             resume()
         } else {
             state = Tunnel.State.DOWN
-            emit()
+            pollStats()
             result?.error(
                 "permission_denied",
                 "Permission to create a VPN connection was declined.",
@@ -219,9 +240,10 @@ class TunnelBridge(
 
     override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
         this.sink = sink
-        // Seed the stream so a fresh listener does not have to call status() first.
-        emit()
-        main.post(statsPoll)
+        // Seeds the stream so a fresh listener does not have to call status()
+        // first, and starts the poll loop if the tunnel is already up — which it
+        // can be, since the interface outlives the app.
+        pollStats()
     }
 
     override fun onCancel(arguments: Any?) {
