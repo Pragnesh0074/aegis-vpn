@@ -48,4 +48,4 @@ final class SecureStoreProvider
   }
 }
 
-String _$secureStoreHash() => r'72d42f8278d64f5b218898991f8a2543f3e32b66';
+String _$secureStoreHash() => r'a5bbbef3bbda568c1412f5770f8ca00b4ad68e4f';

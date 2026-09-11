@@ -54,7 +54,7 @@ final class TunnelControllerProvider
   TunnelController create() => TunnelController();
 }
 
-String _$tunnelControllerHash() => r'60e8e8bb11f15596fcffe8c27894e2f630e17314';
+String _$tunnelControllerHash() => r'852b323f3222d20cc0d2706fc71b3ee80b26dd47';
 
 /// Drives connect and disconnect.
 ///

@@ -25,13 +25,22 @@ part 'vpn_session.g.dart';
 /// cannot be connected from this phone and is not a candidate — the private key
 /// was never uploaded and the peer details are not re-issuable, so there is no
 /// recovery, only re-provisioning.
-@riverpod
+///
+/// `keepAlive`, and every `ref` call happens before the first `await`. Both are
+/// load-bearing. Nothing *watches* this provider — `VpnSession` reads it — so as
+/// an auto-dispose provider it was disposed while `GET /devices` was still in
+/// flight, and the `ref.watch` after that await then threw
+/// `UnmountedRefException`. That is why the first connect on a cold start failed
+/// and the second, with the device list already cached, succeeded.
+@Riverpod(keepAlive: true)
 Future<Device?> provisionedDevice(Ref ref) async {
-  final devices = await ref.watch(devicesProvider.future);
-  if (devices.isEmpty) return null;
-
+  // Resolved up front: after an await, this provider may no longer be mounted
+  // and touching `ref` is an error.
   final configStore = ref.watch(tunnelConfigStoreProvider);
   final keyStore = ref.watch(deviceKeyStoreProvider);
+
+  final devices = await ref.watch(devicesProvider.future);
+  if (devices.isEmpty) return null;
 
   Future<bool> isUsable(Device device) async {
     final config = await configStore.read(device.id);

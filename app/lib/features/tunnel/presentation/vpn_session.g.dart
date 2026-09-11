@@ -16,6 +16,13 @@ part of 'vpn_session.dart';
 /// cannot be connected from this phone and is not a candidate — the private key
 /// was never uploaded and the peer details are not re-issuable, so there is no
 /// recovery, only re-provisioning.
+///
+/// `keepAlive`, and every `ref` call happens before the first `await`. Both are
+/// load-bearing. Nothing *watches* this provider — `VpnSession` reads it — so as
+/// an auto-dispose provider it was disposed while `GET /devices` was still in
+/// flight, and the `ref.watch` after that await then threw
+/// `UnmountedRefException`. That is why the first connect on a cold start failed
+/// and the second, with the device list already cached, succeeded.
 
 @ProviderFor(provisionedDevice)
 final provisionedDeviceProvider = ProvisionedDeviceProvider._();
@@ -28,6 +35,13 @@ final provisionedDeviceProvider = ProvisionedDeviceProvider._();
 /// cannot be connected from this phone and is not a candidate — the private key
 /// was never uploaded and the peer details are not re-issuable, so there is no
 /// recovery, only re-provisioning.
+///
+/// `keepAlive`, and every `ref` call happens before the first `await`. Both are
+/// load-bearing. Nothing *watches* this provider — `VpnSession` reads it — so as
+/// an auto-dispose provider it was disposed while `GET /devices` was still in
+/// flight, and the `ref.watch` after that await then threw
+/// `UnmountedRefException`. That is why the first connect on a cold start failed
+/// and the second, with the device list already cached, succeeded.
 
 final class ProvisionedDeviceProvider
     extends $FunctionalProvider<AsyncValue<Device?>, Device?, FutureOr<Device?>>
@@ -40,13 +54,20 @@ final class ProvisionedDeviceProvider
   /// cannot be connected from this phone and is not a candidate — the private key
   /// was never uploaded and the peer details are not re-issuable, so there is no
   /// recovery, only re-provisioning.
+  ///
+  /// `keepAlive`, and every `ref` call happens before the first `await`. Both are
+  /// load-bearing. Nothing *watches* this provider — `VpnSession` reads it — so as
+  /// an auto-dispose provider it was disposed while `GET /devices` was still in
+  /// flight, and the `ref.watch` after that await then threw
+  /// `UnmountedRefException`. That is why the first connect on a cold start failed
+  /// and the second, with the device list already cached, succeeded.
   ProvisionedDeviceProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'provisionedDeviceProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -65,7 +86,7 @@ final class ProvisionedDeviceProvider
   }
 }
 
-String _$provisionedDeviceHash() => r'eb65f7a4a4586c7bddf00b0c84a7f58d4f715109';
+String _$provisionedDeviceHash() => r'756ea027f5c847a2353bde11d59ca7c144c225cc';
 
 /// Connect, disconnect, and switch location — the whole of what the connect
 /// screen can do.
@@ -131,7 +152,7 @@ final class VpnSessionProvider
   VpnSession create() => VpnSession();
 }
 
-String _$vpnSessionHash() => r'fddae1836bbbb804d63e05abbfb7b678a6cbfeeb';
+String _$vpnSessionHash() => r'ffa6552042891e8c23ae3c2bd667009e50e2f658';
 
 /// Connect, disconnect, and switch location — the whole of what the connect
 /// screen can do.
