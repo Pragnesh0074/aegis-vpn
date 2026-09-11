@@ -7,7 +7,7 @@
 **Scope right now:** backend **done** and one node live. Flutter client **done** and
 **handshaking against the live node**. Next up is the M series: making the control plane
 able to program more than one node. iOS is deliberately deferred.
-**Last updated:** 2026-09-11 (M0-M1 landed; Frankfurt exit node live and held inactive)
+**Last updated:** 2026-09-11 (M0-M1 deployed to Mumbai; Frankfurt live, held inactive pending its SG rule)
 
 ---
 
@@ -36,7 +36,7 @@ able to program more than one node. iOS is deliberately deferred.
 | F7 | Platform VPN tunnel — iOS (Network Extension) | ⬜ deferred |
 | M0 | Node-aware control plane (`WG_NODE_ID`, per-node runner) | ✅ done |
 | M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
-| M2 | Second node (Frankfurt) | 🟡 node live, awaiting Mumbai |
+| M2 | Second node (Frankfurt) | 🟡 both nodes live, awaiting one SG rule |
 | M3 | What "automatic" means across countries | ⬜ not started |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
@@ -54,7 +54,7 @@ a stopped instance rather than a security-group rule.
 |---|---|---|
 | id | `501b27c5-59d2-48ac-a4d1-4e2af3a8a86d` | `a0047e7d-2f56-4370-8776-61170ececf9c` |
 | region | `in-mumbai` | `de-frankfurt` |
-| endpoint | `13.201.194.65:51820` | `3.71.204.118:51820` |
+| endpoint | `13.126.153.247:51820` | `3.71.204.118:51820` |
 | subnet | `10.8.0.0/24` | `10.9.0.0/24` |
 | role | control (API + agent-less, programmed locally) | exit (`NODE_ROLE=exit`, agent on :8787) |
 | active | `true` | **`false`** — deliberately |
@@ -64,20 +64,36 @@ pre-M0 code means `selectLeastLoaded()` can choose Frankfurt while the peer is
 written to Mumbai's interface, which is the exact silent failure this series
 removes. Activate it only after step 3 below.
 
-### To finish, in this order
+### To finish
 
-1. **Bring Mumbai back** and confirm its public IP is still `13.201.194.65`. If it
-   changed, the `nodes` row endpoint and all four existing peers need updating.
-2. **Deploy M0/M1 to Mumbai** — the commits are local-only, so either push and pull
-   or ship a tarball. `npm ci && npx prisma generate && npm run build`.
-3. **Set `WG_NODE_ID=501b27c5-59d2-48ac-a4d1-4e2af3a8a86d`** in `/etc/aegis/api.env`
-   and restart `aegis-api`. This is required, not optional, the moment Frankfurt goes
-   active.
-4. **Activate Frankfurt**: `update nodes set active = true where region = 'de-frankfurt';`
-5. **Verify from the phone.** Pick Germany, then on the Frankfurt box confirm
-   `sudo wg show wg0` reports a real `latest handshake` for the device's key. An
-   interface that comes up with no handshake is what a misrouted peer looks like,
-   and the app reports that as "Not verified" rather than green.
+Mumbai now runs M0/M1 with `WG_NODE_ID` set; boot reconciliation resolved its own
+node correctly (`Reconciled wg0: +0 -0 =4`). One thing blocks activation:
+
+1. **Frankfurt's security group still whitelists Mumbai's old address** for TCP
+   8787. Mumbai moved from `13.201.194.65` to `13.126.153.247` when it was
+   restarted without an Elastic IP, so `curl` from Mumbai to the agent times out.
+   Update the rule to `13.126.153.247/32`.
+2. **Then activate Frankfurt**:
+   `update nodes set active = true where region = 'de-frankfurt';`
+
+Do not reverse that order. `selectLeastLoaded()` ranks by free slots, so the
+moment Frankfurt is active it becomes the default choice for every new device —
+Frankfurt has 250 free against Mumbai's 246. With the agent unreachable, each of
+those issues would fail with a 503 instead of quietly landing on the wrong
+interface. That is the M0 behaviour working as designed, but it still means every
+new signup breaks until the rule is fixed.
+
+3. **Verify**: connect from the app choosing Germany, then on the Frankfurt box
+   confirm `sudo wg show wg0` reports a real `latest handshake`.
+
+### Neither instance has an Elastic IP
+
+Accepted for the MVP, but every stop/start changes both addresses and each change
+breaks four things: the `nodes.endpoint`, the `agentUrl`, the Frankfurt SG rule,
+and `_defaultBaseUrl` in `app/lib/core/config/app_config.dart` (which needs an APK
+rebuild). Existing devices cannot recover at all, because the endpoint is only ever
+returned by `POST /devices`. An Elastic IP costs the same as the ephemeral address
+already being billed; the alternative is a domain plus a dynamic-DNS updater.
 
 Then **M3**: decide what "automatic" means now that two countries exist.
 `selectLeastLoaded()` sorts by free slots, so it will send a Mumbai user to
