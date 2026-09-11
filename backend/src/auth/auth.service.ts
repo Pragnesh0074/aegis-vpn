@@ -34,10 +34,7 @@ export class AuthService {
       return this.tokens.issuePair(user.id, user.email);
     } catch (error) {
       // Rely on the unique constraint rather than a check-then-insert, which races.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('An account with that email already exists');
       }
       throw error;

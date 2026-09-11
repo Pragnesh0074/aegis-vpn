@@ -32,11 +32,7 @@ export class TokenService {
   }
 
   /** Mints a fresh pair and records the refresh token. `replaces` links a rotation. */
-  async issuePair(
-    userId: string,
-    email: string,
-    replaces?: { id: string },
-  ): Promise<TokenPair> {
+  async issuePair(userId: string, email: string, replaces?: { id: string }): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(
       { sub: userId, email } satisfies AccessTokenPayload,
       { secret: this.config.accessSecret, expiresIn: this.config.accessTtl },

@@ -43,13 +43,15 @@ describe('validateEnv', () => {
     // A fake runner in production would ACK peer creation over HTTP while never
     // touching wg0 — every client would get a config that cannot connect.
     it('rejects WG_RUNNER=fake', () => {
-      expect(() => validateEnv({ ...prod, WG_RUNNER: 'fake' })).toThrow(/not allowed in production/);
+      expect(() => validateEnv({ ...prod, WG_RUNNER: 'fake' })).toThrow(
+        /not allowed in production/,
+      );
     });
 
     it('rejects a leftover .env.example placeholder secret', () => {
-      expect(() =>
-        validateEnv({ ...prod, JWT_ACCESS_SECRET: 'replace-me-'.repeat(4) }),
-      ).toThrow(/placeholder/);
+      expect(() => validateEnv({ ...prod, JWT_ACCESS_SECRET: 'replace-me-'.repeat(4) })).toThrow(
+        /placeholder/,
+      );
     });
 
     it('allows WG_RUNNER=fake outside production', () => {

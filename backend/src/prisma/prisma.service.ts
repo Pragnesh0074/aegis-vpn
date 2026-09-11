@@ -6,7 +6,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    super({ log: [{ emit: 'event', level: 'warn' }, { emit: 'event', level: 'error' }] });
+    super({
+      log: [
+        { emit: 'event', level: 'warn' },
+        { emit: 'event', level: 'error' },
+      ],
+    });
   }
 
   async onModuleInit(): Promise<void> {
