@@ -6,6 +6,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../autoconnect/presentation/widgets/auto_connect_card.dart';
+import '../../rewards/data/ad_ids.dart';
+import '../../rewards/data/rewarded_ad_service.dart';
+import '../../rewards/presentation/ad_block_grant_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import 'ad_block_controller.dart';
 import 'kill_switch_controller.dart';
@@ -50,6 +53,28 @@ class ProtectionScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _watchAd(BuildContext context, WidgetRef ref) async {
+    final outcome =
+        await ref.read(adBlockGrantControllerProvider.notifier).watchAdForTime();
+    if (!context.mounted) return;
+
+    switch (outcome) {
+      case AdOutcome.earned:
+        showMessage(
+          context,
+          'Ad blocking on for ${adBlockGrantWindow.inMinutes} more minutes.',
+        );
+      // Closing an ad early is a choice, not a fault. Saying nothing alarming.
+      case AdOutcome.dismissed:
+        showMessage(context, 'Ad closed early — no time added.');
+      case AdOutcome.unavailable:
+        showMessage(context, 'No ad available right now. Try again shortly.',
+            isError: true);
+      case AdOutcome.failed:
+        showMessage(context, 'That ad could not be shown. Try again.', isError: true);
+    }
+  }
+
   Future<void> _openSystemSettings(BuildContext context, WidgetRef ref) async {
     final opened =
         await ref.read(killSwitchControllerProvider.notifier).openSystemVpnSettings();
@@ -78,7 +103,10 @@ class ProtectionScreen extends ConsumerWidget {
           children: [
             const AutoConnectCard(),
             Gap.md,
-            _AdBlockCard(onChanged: (value) => _toggleAdBlock(context, ref, value)),
+            _AdBlockCard(
+              onChanged: (value) => _toggleAdBlock(context, ref, value),
+              onWatchAd: () => _watchAd(context, ref),
+            ),
             Gap.md,
             _ReconnectCard(
               enabled: enabled,
@@ -98,26 +126,38 @@ class ProtectionScreen extends ConsumerWidget {
   }
 }
 
-/// The ad-blocking switch.
+/// Ad blocking, and the ad you watch to get it.
 ///
-/// Its own card rather than a row, because the honest description is the point.
-/// DNS filtering removes third-party ads and trackers — most of the web, and the
-/// ad SDKs inside apps — and cannot touch ads served from the same hostname as
-/// the content, which is how YouTube, Instagram and TikTok deliver theirs. A
-/// switch labelled "block ads" with nothing else said would be read as a promise
-/// this cannot keep, and the one-star review writes itself.
+/// Its own card rather than a row, because two things need saying and neither is
+/// optional. DNS filtering removes third-party ads and trackers — most of the
+/// web, and the ad SDKs inside apps — and cannot touch ads served from the same
+/// hostname as the content, which is how YouTube, Instagram and TikTok deliver
+/// theirs. And the filtering is rented five minutes at a time, so the card has
+/// to show what is left rather than a switch that looks permanent.
 ///
-/// Draws from the server, because that is where the decision lives: the node
-/// hands each device either its filtering resolver or its plain one.
+/// The switch stays visible with time on the clock so someone can turn filtering
+/// off without waiting it out; with no time left it is inert and the button is
+/// the only thing to do.
 class _AdBlockCard extends ConsumerWidget {
-  const _AdBlockCard({required this.onChanged});
+  const _AdBlockCard({required this.onChanged, required this.onWatchAd});
 
   final ValueChanged<bool> onChanged;
+  final VoidCallback onWatchAd;
+
+  static String _clock(Duration left) {
+    final minutes = left.inMinutes;
+    final seconds = left.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setting = ref.watch(adBlockControllerProvider);
-    final enabled = setting.value ?? false;
+    final grant = ref.watch(adBlockGrantControllerProvider).value;
+
+    final active = grant?.isActive ?? false;
+    final watching = grant?.watching ?? false;
+    final enabled = (setting.value ?? false) && active;
 
     return Container(
       padding: EdgeInsets.all(16.r),
@@ -143,25 +183,76 @@ class _AdBlockCard extends ConsumerWidget {
               ),
               Switch(
                 value: enabled,
-                // Nothing to toggle until the profile has loaded; letting it move
-                // early would fire a write against a value nobody has read yet.
-                onChanged: setting.isLoading ? null : onChanged,
+                // Nothing to switch off when there is no time on the clock, and
+                // a switch that springs back is worse than one that will not move.
+                onChanged: (setting.isLoading || !active) ? null : onChanged,
               ),
             ],
           ),
           SizedBox(height: 4.h),
           Text(
-            'Ad and tracker domains are refused by the resolver on the server, so '
-            'they never load — in the browser and inside apps alike. Changing this '
-            'reconnects the tunnel.',
+            active
+                ? 'Ad and tracker domains are refused by the resolver on the '
+                    'server, so they never load — in the browser and inside apps '
+                    'alike.'
+                : 'Watch a short ad to turn on filtering for '
+                    '${adBlockGrantWindow.inMinutes} minutes. Ad and tracker '
+                    'domains are then refused by the server, in the browser and '
+                    'inside apps alike.',
             style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
           ),
-          if (enabled) ...[
+          if (active) ...[
+            SizedBox(height: 12.h),
+            Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 16.r, color: AppColors.textHigh),
+                SizedBox(width: 6.w),
+                Text(
+                  '${_clock(grant!.remaining)} left',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textHigh,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          SizedBox(height: 12.h),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: watching ? null : onWatchAd,
+              icon: watching
+                  ? SizedBox(
+                      width: 16.r,
+                      height: 16.r,
+                      child: const CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.play_circle_outline),
+              label: Text(
+                watching
+                    ? 'Loading ad…'
+                    : active
+                        ? 'Watch another ad for +${adBlockGrantWindow.inMinutes} min'
+                        : 'Watch an ad for ${adBlockGrantWindow.inMinutes} minutes',
+              ),
+            ),
+          ),
+          if (active) ...[
             SizedBox(height: 12.h),
             const _Warning(
               text: 'Ads inside YouTube, Instagram and TikTok still appear. They '
                   'come from the same address as the video or post, so blocking '
                   'them would block the content too.',
+            ),
+          ],
+          if (AdIds.usingTestIds) ...[
+            SizedBox(height: 12.h),
+            const _Warning(
+              text: 'Test ads. This build uses Google\'s sample ad unit, so every '
+                  'ad is the same placeholder and nothing is earned.',
             ),
           ],
         ],

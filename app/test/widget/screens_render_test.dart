@@ -248,23 +248,40 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Rebuild the tunnel if it drops'), findsOneWidget);
-        // Auto-connect sits above it, answering the other half of the question:
-        // one brings a tunnel back, the other brings one up that was never there.
+        // The list virtualises, so anything below the fold is not merely invisible
+        // — it is not built, and findsNothing would be a lie about the screen
+        // rather than a fact about it. Scroll to each card before asserting.
+        Future<void> scrollTo(Finder finder) => tester.scrollUntilVisible(
+              finder,
+              300,
+              scrollable: find.byType(Scrollable).first,
+            );
+
         expect(find.text('Connect on untrusted Wi-Fi'), findsOneWidget);
         expect(find.text('Block ads and trackers'), findsOneWidget);
 
-        // All three default to off, and the stubbed platform reports them disarmed.
-        // Ad blocking's switch is additionally *disabled* here: its value comes from
-        // `/users/me`, which this harness does not answer, and a switch that moves
-        // before the profile has loaded would write a preference nobody has read.
-        final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-        expect(switches, hasLength(3));
-        expect(switches.map((toggle) => toggle.value), everyElement(isFalse));
+        // Filtering is rented, so with no grant the switch has nothing to switch
+        // and the ad is the only way forward. A switch that springs straight back
+        // would be worse than one that will not move.
+        final adBlockSwitch = tester.widget<Switch>(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text('Block ads and trackers'),
+              matching: find.byType(Container),
+            ).first,
+            matching: find.byType(Switch),
+          ),
+        );
+        expect(adBlockSwitch.value, isFalse);
         expect(
-          switches.where((toggle) => toggle.onChanged == null),
-          hasLength(1),
-          reason: 'the ad-blocking switch stays inert until the profile resolves',
+          adBlockSwitch.onChanged,
+          isNull,
+          reason: 'nothing to toggle until an ad has bought some time',
+        );
+        expect(
+          find.textContaining('Watch an ad for'),
+          findsOneWidget,
+          reason: 'the way to earn filtering has to be on the card',
         );
 
         // Auto-connect's own limit, stated on the card rather than discovered.
@@ -273,23 +290,16 @@ void main() {
           findsOneWidget,
         );
 
+        await scrollTo(find.text('Rebuild the tunnel if it drops'));
+        expect(find.text('Rebuild the tunnel if it drops'), findsOneWidget);
+
         // The pull-down tile is offered here, since a tile nobody has added is a
         // tile nobody knows about.
-        await tester.scrollUntilVisible(
-          find.text('Add the tile'),
-          300,
-          scrollable: find.byType(Scrollable).first,
-        );
+        await scrollTo(find.text('Add the tile'));
         expect(find.text('Connect from the pull-down shade'), findsOneWidget);
 
         // The honesty this screen exists for: an app cannot block traffic on
-        // Android, so the page must say who can. Below the fold on a small
-        // phone, so scroll rather than assert on whatever happens to fit.
-        Future<void> scrollTo(Finder finder) => tester.scrollUntilVisible(
-              finder,
-              300,
-              scrollable: find.byType(Scrollable).first,
-            );
+        // Android, so the page must say who can.
 
         await scrollTo(find.textContaining('Only Android can stop traffic'));
         expect(find.text('Block all traffic without a VPN'), findsOneWidget);

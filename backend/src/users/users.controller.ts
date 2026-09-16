@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { UsersService, type UserProfile } from './users.service';
@@ -31,5 +31,19 @@ export class UsersController {
       return this.users.setAdBlockEnabled(user.userId, dto.adBlockEnabled);
     }
     return this.users.getProfile(user.userId);
+  }
+
+  /**
+   * Credits one watched rewarded ad and returns the refreshed profile, whose
+   * `adBlockRemainingMs` is what the client counts down from.
+   *
+   * Unverified: the client asserts the ad was watched. AdMob's server-side
+   * verification callback should replace this before anyone is charged for
+   * anything — see `grantAdBlockReward`.
+   */
+  @Post('me/ad-block/grant')
+  @HttpCode(HttpStatus.OK)
+  grantAdBlock(@CurrentUser() user: AuthenticatedUser): Promise<UserProfile> {
+    return this.users.grantAdBlockReward(user.userId);
   }
 }

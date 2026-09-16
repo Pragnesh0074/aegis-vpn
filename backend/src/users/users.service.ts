@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
-import { entitledToAdBlocking, type AdBlockSubject } from '../devices/dns-policy';
+import {
+  adBlockRemainingMs,
+  entitledToAdBlocking,
+  extendAdBlockGrant,
+  type AdBlockSubject,
+} from '../devices/dns-policy';
 
 export interface UserProfile {
   id: string;
@@ -11,8 +16,14 @@ export interface UserProfile {
   maxDevices: number;
   /** What the user asked for. */
   adBlockEnabled: boolean;
-  /** Whether their plan allows it. Both are sent so the client can say *why*. */
+  /**
+   * Whether the account may have filtering right now — currently, whether a
+   * rewarded-ad grant is still running. Sent alongside [adBlockEnabled] so the
+   * client can say *why* filtering is off rather than just that it is.
+   */
   adBlockEntitled: boolean;
+  /** Milliseconds of grant left, for the countdown. Zero when not entitled. */
+  adBlockRemainingMs: number;
 }
 
 @Injectable()
@@ -37,15 +48,27 @@ export class UsersService {
   async getProfile(userId: string): Promise<UserProfile> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, createdAt: true, adBlockEnabled: true },
+      select: {
+        id: true,
+        email: true,
+        createdAt: true,
+        adBlockEnabled: true,
+        adBlockUntil: true,
+      },
     });
     if (!user) throw new NotFoundException('User not found');
 
+    // One instant for both, so a profile cannot report "entitled" alongside zero
+    // milliseconds remaining because the clock moved between the two calls.
+    const now = new Date();
+    const { adBlockUntil: _omitted, ...rest } = user;
+
     return {
-      ...user,
+      ...rest,
       deviceCount: await this.activeDeviceCount(userId),
       maxDevices: this.config.maxDevicesPerUser,
-      adBlockEntitled: entitledToAdBlocking(user),
+      adBlockEntitled: entitledToAdBlocking(user, now),
+      adBlockRemainingMs: adBlockRemainingMs(user, now),
     };
   }
 
@@ -53,7 +76,7 @@ export class UsersService {
   async adBlockSubject(userId: string): Promise<AdBlockSubject> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { adBlockEnabled: true },
+      select: { adBlockEnabled: true, adBlockUntil: true },
     });
     if (!user) throw new NotFoundException('User not found');
     return user;
@@ -74,6 +97,28 @@ export class UsersService {
     await this.prisma.user.update({
       where: { id: userId },
       data: { adBlockEnabled: enabled },
+    });
+    return this.getProfile(userId);
+  }
+
+  /**
+   * Credits one watched rewarded ad.
+   *
+   * NOTE: nothing here proves an ad was actually watched — the client simply says
+   * so. AdMob's server-side verification callback is the fix, and until it is
+   * wired up this endpoint is worth exactly as much as the client's word.
+   * `AD_BLOCK_MAX_BANKED_MS` caps the damage: a caller in a loop can bank an hour
+   * and no more.
+   *
+   * Switching the preference on is deliberate. Someone who just sat through an ad
+   * to earn filtering meant to have it, and making them find the toggle
+   * afterwards would be a bad joke.
+   */
+  async grantAdBlockReward(userId: string): Promise<UserProfile> {
+    const subject = await this.adBlockSubject(userId);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { adBlockUntil: extendAdBlockGrant(subject), adBlockEnabled: true },
     });
     return this.getProfile(userId);
   }

@@ -55,6 +55,15 @@
             </intent-filter>
         </service>
 
+        <!-- AdMob application id.
+             GOOGLE'S PUBLIC TEST ID, not ours. It serves test creatives only, and
+             earns nothing. Swap it for the real app id before any release build, and
+             note that a real id here with test ad UNIT ids (see AdIds) is the
+             combination that gets an AdMob account suspended for invalid traffic. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

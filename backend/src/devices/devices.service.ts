@@ -210,15 +210,18 @@ export class DevicesService {
   }
 
   private toConfig(device: Device, node: Node, subject: AdBlockSubject): DeviceConfigResponse {
+    // Resolved once: calling resolverFor twice could straddle a grant expiring
+    // between the two calls and report an address that disagrees with the flag.
+    const resolver = resolverFor(subject, node);
     return {
       deviceId: device.id,
       name: device.name,
       platform: device.platform,
       createdAt: device.createdAt,
       tunnelIp: `${device.tunnelIpV4}/32`,
-      dns: resolverFor(subject, node),
+      dns: resolver,
       adBlocking: {
-        enabled: resolverFor(subject, node) === node.dns,
+        enabled: resolver === node.dns,
         // False on a node with only the one resolver, so the client can explain why
         // the switch is unavailable rather than appearing to ignore it.
         supported: canToggleAdBlocking(node),

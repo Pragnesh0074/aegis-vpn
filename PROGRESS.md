@@ -49,7 +49,8 @@ history, quick-settings tile, node health + failover)
 | Q1 | Quick Settings tile | ✅ done |
 | N1 | Node health + failover | ✅ done |
 | B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — live on Mumbai |
-| B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ done — live on Mumbai (app rebuild pending) |
+| B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ done — live on Mumbai |
+| B3 | Rewarded ad buys 5 min of ad blocking (AdMob, test ids) | ✅ built — backend deploy + app rebuild pending |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
@@ -269,6 +270,22 @@ Append here as decisions are made, so a later session does not re-litigate them.
 ---
 
 ## Known issues / follow-ups
+
+- **The reward is taken on trust.** `POST /users/me/ad-block/grant` believes the client
+  when it says an ad was watched; nothing proves it. AdMob's server-side verification
+  (SSV) callback is the fix. Until then `AD_BLOCK_MAX_BANKED_MS` (1h) is the only thing
+  bounding a caller in a loop.
+- **AdMob is allowlisted in Blocky, and that leaks some web ads.** The rewarded ad that
+  buys filtering has to load *while* filtering is on, or extending a grant is
+  impossible. `pagead2.googlesyndication.com` and `tpc.googlesyndication.com` also
+  serve web ads, so exempting them lets some through. Unavoidable when a blocker is
+  funded by ads; the list is kept as narrow as it can be.
+- **Test ad ids are in use.** `AdIds` and the `APPLICATION_ID` meta-data in
+  AndroidManifest.xml must be swapped together before release — a real app id with test
+  unit ids (or the reverse) is what gets an AdMob account flagged for invalid traffic.
+- **Existing accounts lose filtering on deploy.** `adBlockUntil` starts null and null
+  means not entitled, which is the point of gating, but it is a behaviour change for
+  anyone already filtered.
 
 - ~~**Mumbai hands out `1.1.1.1`**~~ — **closed 2026-09-16.** `nodes.dns` is now `10.8.0.1` and a device issued through the live API comes back with `"dns": "10.8.0.1"`; queried from the tunnel address, `doubleclick.net` -> `0.0.0.0` and `example.com` resolves. New devices on Mumbai get ad blocking. Original finding:
   while deploying B1: Mumbai was built by hand, never by `provision.sh` (no `inet aegis`

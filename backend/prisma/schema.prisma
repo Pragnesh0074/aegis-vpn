@@ -22,6 +22,13 @@ model User {
   /// which is where a paid plan will be enforced.
   adBlockEnabled Boolean @default(true)
 
+  /// When the current rewarded-ad grant runs out. Null, or in the past, means the
+  /// account is not entitled to filtering however `adBlockEnabled` is set.
+  ///
+  /// Stored as an absolute instant rather than a remaining duration so it cannot be
+  /// stretched by a device with a wrong clock, and so it survives a restart.
+  adBlockUntil DateTime?
+
   devices       Device[]
   refreshTokens RefreshToken[]
 

@@ -44,6 +44,7 @@ interface HarnessOptions {
   taken?: string[];
   hasCapacity?: boolean;
   adBlockEnabled?: boolean;
+  adBlockUntil?: Date | null;
 }
 
 function harness(options: HarnessOptions) {
@@ -80,7 +81,11 @@ function harness(options: HarnessOptions) {
 
   const users = {
     hasDeviceCapacity: async () => options.hasCapacity ?? true,
-    adBlockSubject: async () => ({ adBlockEnabled: options.adBlockEnabled ?? true }),
+    adBlockSubject: async () => ({
+      adBlockEnabled: options.adBlockEnabled ?? true,
+      // Far enough out that no test races the grant expiring mid-run.
+      adBlockUntil: options.adBlockUntil ?? new Date(Date.now() + 60 * 60 * 1000),
+    }),
   } as unknown as UsersService;
 
   const nodes = {

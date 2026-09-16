@@ -446,6 +446,19 @@ else
 # You will need this. Blocklists routinely break payment gateways, delivery
 # tracking and OAuth login flows. When a user reports a broken site, add the
 # domain here and run:  systemctl reload blocky
+
+# ── AdMob ───────────────────────────────────────────────────────────────────────
+# The rewarded ad that BUYS ad blocking has to be able to load while ad blocking is
+# on, or extending a grant is impossible: the user would need the very domains they
+# just paid to block. Kept to the hosts the mobile SDK actually needs.
+#
+# Honest cost: pagead2 and tpc also serve web ads, so exempting them lets some
+# through. That is the unavoidable price of funding a blocker with ads.
+googleads.g.doubleclick.net
+pagead2.googlesyndication.com
+tpc.googlesyndication.com
+imasdk.googleapis.com
+googleadservices.com
 ALLOWLIST
   ok "empty allowlist created at /etc/blocky/allowlist.txt"
 fi
