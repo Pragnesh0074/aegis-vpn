@@ -8,7 +8,10 @@ import 'package:aegis_vpn/features/history/presentation/session_recorder.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/devices/presentation/device_config_screen.dart';
 import 'package:aegis_vpn/features/home/presentation/connect_screen.dart';
-import 'package:aegis_vpn/features/killswitch/presentation/protection_screen.dart';
+import 'package:aegis_vpn/features/profile/domain/user_profile.dart';
+import 'package:aegis_vpn/features/profile/presentation/profile_providers.dart';
+import 'package:aegis_vpn/features/profile/presentation/profile_screen.dart';
+import 'package:aegis_vpn/features/profile/presentation/widgets/settings_tile.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
 import 'package:aegis_vpn/features/nodes/presentation/locations_screen.dart';
 import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
@@ -240,35 +243,61 @@ void main() {
         });
       }
 
-      testWidgets('protection screen says what each part does not cover', (tester) async {
+      testWidgets('account page carries every setting, and its caveats', (tester) async {
         await pumpScreen(
           tester,
-          const ProtectionScreen(),
+          const ProfileScreen(),
           surfaceSize: entry.value,
+          overrides: [
+            userProfileProvider.overrideWith(
+              (ref) async => UserProfile(
+                id: 'u1',
+                email: 'someone@example.com',
+                createdAt: DateTime.utc(2026),
+                deviceCount: 1,
+                maxDevices: 5,
+                adBlockEnabled: true,
+                // No grant, so filtering is not actually in force.
+                adBlockEntitled: false,
+                adBlockRemaining: Duration.zero,
+              ),
+            ),
+          ],
         );
         await tester.pumpAndSettle();
 
-        // The list virtualises, so anything below the fold is not merely invisible
-        // — it is not built, and findsNothing would be a lie about the screen
-        // rather than a fact about it. Scroll to each card before asserting.
-        Future<void> scrollTo(Finder finder) => tester.scrollUntilVisible(
-              finder,
-              300,
-              scrollable: find.byType(Scrollable).first,
+        // The list virtualises, so a setting below the fold is not built at all
+        // and findsNothing would describe the viewport rather than the page.
+        //
+        // Dragged from the left gutter, by hand. The helpers all start their
+        // drag at the centre of the scrollable, and on a small phone the centre
+        // line runs through the Switches — which swallow the gesture and toggle
+        // instead of scrolling, so the target never arrives and the failure
+        // surfaces as a bare "No element".
+        Future<void> scrollTo(Finder finder) async {
+          for (var i = 0; i < 40 && finder.evaluate().isEmpty; i++) {
+            await tester.dragFrom(
+              Offset(8, entry.value.height / 2),
+              const Offset(0, -220),
             );
+            await tester.pumpAndSettle();
+          }
+          expect(finder, findsWidgets, reason: 'never scrolled into view');
+        }
 
-        expect(find.text('Connect on untrusted Wi-Fi'), findsOneWidget);
-        expect(find.text('Block ads and trackers'), findsOneWidget);
+        // The Protection page is gone; every switch it held has to be reachable
+        // from here, under a name someone would actually search for.
+        expect(find.text('Ad blocker'), findsOneWidget);
 
-        // Filtering is rented, so with no grant the switch has nothing to switch
-        // and the ad is the only way forward. A switch that springs straight back
-        // would be worse than one that will not move.
+        // Filtering is rented, so with no grant there is nothing to switch and
+        // the ad is the only way forward. A switch that springs back would be
+        // worse than one that will not move.
         final adBlockSwitch = tester.widget<Switch>(
           find.descendant(
             of: find.ancestor(
-              of: find.text('Block ads and trackers'),
-              matching: find.byType(Container),
-            ).first,
+              of: find.text('Ad blocker'),
+              matching: find.byType(SettingsTile),
+            ),
             matching: find.byType(Switch),
           ),
         );
@@ -278,39 +307,36 @@ void main() {
           isNull,
           reason: 'nothing to toggle until an ad has bought some time',
         );
+        expect(find.text('Watch ad'), findsOneWidget);
+
+        // The caveat that stops the switch promising what DNS cannot do. Short
+        // now, but dropping it would make the setting misleading.
         expect(
-          find.textContaining('Watch an ad for'),
+          find.textContaining('Ads inside YouTube'),
           findsOneWidget,
-          reason: 'the way to earn filtering has to be on the card',
+          reason: 'the limit of DNS filtering has to stay on the setting',
         );
 
-        // Auto-connect's own limit, stated on the card rather than discovered.
+        await scrollTo(find.text('Auto-connect on public Wi-Fi'));
+        expect(find.text('Auto-connect on public Wi-Fi'), findsOneWidget);
+
+        await scrollTo(find.text('Reconnect if it drops'));
+        expect(find.text('Reconnect if it drops'), findsOneWidget);
+
+        // The honesty this page exists for: an app cannot block traffic on
+        // Android, so it must say who can.
+        await scrollTo(find.text('Block traffic when VPN is off'));
         expect(
-          find.textContaining('Android will not let an app start a VPN'),
+          find.textContaining('only the system can do this'),
           findsOneWidget,
+          reason: 'an app must not imply it can block traffic itself',
         );
 
-        await scrollTo(find.text('Rebuild the tunnel if it drops'));
-        expect(find.text('Rebuild the tunnel if it drops'), findsOneWidget);
+        await scrollTo(find.text('Quick Settings tile'));
+        expect(find.text('Quick Settings tile'), findsOneWidget);
 
-        // The pull-down tile is offered here, since a tile nobody has added is a
-        // tile nobody knows about.
-        await scrollTo(find.text('Add the tile'));
-        expect(find.text('Connect from the pull-down shade'), findsOneWidget);
-
-        // The honesty this screen exists for: an app cannot block traffic on
-        // Android, so the page must say who can.
-
-        await scrollTo(find.textContaining('Only Android can stop traffic'));
-        expect(find.text('Block all traffic without a VPN'), findsOneWidget);
-        expect(find.textContaining('Only Android can stop traffic'), findsOneWidget);
-
-        await scrollTo(find.text('While disconnected'));
-        expect(find.text('While disconnected'), findsOneWidget);
-        expect(
-          find.textContaining('Traffic uses your normal connection'),
-          findsOneWidget,
-        );
+        await scrollTo(find.text('Connection history'));
+        expect(find.text('Connection history'), findsOneWidget);
 
         expect(tester.takeException(), isNull);
       });

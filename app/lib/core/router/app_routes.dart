@@ -21,12 +21,6 @@ abstract final class AppRoutes {
   static const devicesSegment = 'devices';
   static const devices = '$account/$devicesSegment';
 
-  /// Also under the account tab. Everything that brings the tunnel up or back
-  /// up without being asked: auto-connect and the kill switch. A page rather
-  /// than rows with switches on them, because what each one does and does not
-  /// cover takes more than a subtitle to say honestly.
-  static const protectionSegment = 'protection';
-  static const protection = '$account/$protectionSegment';
 
   /// Which apps bypass the tunnel. Its own page because the picker is a list of
   /// every app on the device.

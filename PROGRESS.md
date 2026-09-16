@@ -50,7 +50,8 @@ history, quick-settings tile, node health + failover)
 | N1 | Node health + failover | ✅ done |
 | B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — live on Mumbai |
 | B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ done — live on Mumbai |
-| B3 | Rewarded ad buys 5 min of ad blocking (AdMob, test ids) | ✅ built — backend deploy + app rebuild pending |
+| B3 | Rewarded ad buys 5 min of ad blocking (AdMob, test ids) | ✅ done — backend live, app rebuild pending |
+| U1 | Protection page folded into Account, plain-language settings | ✅ built — app rebuild pending |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
