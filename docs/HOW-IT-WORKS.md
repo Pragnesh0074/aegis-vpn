@@ -94,8 +94,24 @@ Every packet, forever after. **The API is not involved.**
                                        (sees the NODE's IP, not the phone's)
 ```
 
-The reply retraces the path and is encrypted back to that peer. DNS is answered by
-Unbound on `10.7.0.1`, inside the tunnel, so lookups never leak to the local ISP.
+The reply retraces the path and is encrypted back to that peer. DNS is answered
+inside the tunnel on `10.7.0.1`, so lookups never leak to the local ISP. Two
+processes sit behind that one address:
+
+```
+peer ──▶ blocky  10.7.0.1:53 ──▶ unbound  127.0.0.1:5335 ──▶ root servers
+         sinkholes ad and        recursion, DNSSEC,
+         tracker domains         cache
+```
+
+Blocky answers `0.0.0.0` for anything on its blocklists (~79k domains: ads,
+trackers, telemetry) and passes everything else through. Unbound still does the
+actual resolving, so the "queries never leave the node" property is unchanged.
+
+This kills third-party ads — the web, and in-app ad SDKs like AdMob and Unity
+Ads. It cannot touch ads served from the same hostname as the content, which is
+how YouTube, Instagram and TikTok deliver theirs; no DNS filter can. Say so in
+the UI rather than letting users discover it.
 
 **If the API is down, live tunnels keep working.** It is only needed to add or remove a
 device.

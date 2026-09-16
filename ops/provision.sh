@@ -43,6 +43,13 @@ DB_NAME="aegis"
 DB_USER="aegis"
 SERVICE_USER="vpnapi"
 
+# DNS filtering. Blocky fronts Unbound on the tunnel address: it sinkholes ad and
+# tracker domains and hands everything else to Unbound, which still does the
+# recursion. Pinned rather than tracking latest, so every node in the fleet runs
+# the same resolver — override it to upgrade one node ahead of the others.
+BLOCKY_VERSION="${BLOCKY_VERSION:-v0.35.0}"
+UNBOUND_PORT="5335"    # Unbound moves off :53 to make room for Blocky
+
 # ── Cloud detection ─────────────────────────────────────────────────────────────
 # Each provider answers on the link-local metadata address but with a different
 # handshake. Best-effort only: an unknown result is fine, it just means no
@@ -90,7 +97,7 @@ log "Installing packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq \
-  wireguard wireguard-tools nftables unbound qrencode \
+  wireguard wireguard-tools nftables unbound dnsutils qrencode \
   iptables-persistent curl git ca-certificates
 ok "packages installed"
 
@@ -202,18 +209,56 @@ systemctl enable --now nftables >/dev/null 2>&1 || true
 nft -f /etc/nftables.conf
 ok "ruleset loaded"
 
-# ── Unbound ─────────────────────────────────────────────────────────────────────
-log "Unbound resolver on ${TUNNEL_SERVER_IP}"
+# ── Resolver chain: Blocky → Unbound ────────────────────────────────────────────
+# Clients are handed exactly one resolver address — TUNNEL_SERVER_IP, stored as
+# nodes.dns and pushed into every peer's [Interface] — and that address now
+# belongs to Blocky. Blocky sinkholes ad and tracker domains and forwards
+# everything else to Unbound on loopback, which still does the real recursion.
+# Queries leave this box the same way they did before: to the root servers, never
+# to a public resolver.
+#
+# Order matters. Unbound has to vacate TUNNEL_SERVER_IP:53 before Blocky can bind
+# it, so Unbound is reconfigured and restarted first.
+
+# Blocky's freeBind will happily bind an address that does not exist, so a wrong
+# TUNNEL_SERVER_IP yields a node that looks perfectly healthy and answers nobody:
+# systemctl green, every client's DNS dead. The live fleet does NOT use this
+# script's 10.7.0.0/24 default — Mumbai is 10.8, Frankfurt 10.9 — so verify the
+# address against the interface that is actually up, before touching any config.
+if ip link show "$WG_IF" >/dev/null 2>&1; then
+  if ! ip -4 addr show "$WG_IF" | grep -qw "${TUNNEL_SERVER_IP}"; then
+    cat >&2 <<MISMATCH
+
+TUNNEL_SERVER_IP=${TUNNEL_SERVER_IP} is not an address on ${WG_IF}:
+$(ip -4 -brief addr show "$WG_IF")
+
+Refusing to point the resolver at an address no peer can reach. Re-run with the
+values this node actually uses, for example:
+
+  sudo TUNNEL_NET=10.8.0.0/24 TUNNEL_SERVER_IP=10.8.0.1 bash $0
+
+MISMATCH
+    exit 1
+  fi
+  ok "resolver address ${TUNNEL_SERVER_IP} confirmed on ${WG_IF}"
+fi
+
+log "Unbound recursor on 127.0.0.1:${UNBOUND_PORT}"
 cat > /etc/unbound/unbound.conf.d/aegis-vpn.conf <<UNBOUND
 server:
-    interface: ${TUNNEL_SERVER_IP}
-    # wg0 does not exist yet when unbound starts, so it must be allowed to bind an
-    # address that is not present. Without this, unbound fails on boot.
-    ip-freebind: yes
+    # Loopback only. Blocky owns ${TUNNEL_SERVER_IP}:53 and is now the sole
+    # client here, so nothing inside the tunnel reaches Unbound directly — which
+    # is also why ip-freebind is gone: 127.0.0.1 always exists.
+    interface: 127.0.0.1@${UNBOUND_PORT}
 
     access-control: 0.0.0.0/0 refuse
-    access-control: ${TUNNEL_NET} allow
     access-control: 127.0.0.0/8 allow
+    # Unbound does not listen on the tunnel address any more, so this grants
+    # nothing today. It is kept so that the emergency "turn blocking off" path in
+    # docs/SERVER-OPS.md — point 'interface' back at ${TUNNEL_SERVER_IP} and
+    # restart — is one line, instead of one line plus an outage while somebody
+    # works out why every client is getting REFUSED.
+    access-control: ${TUNNEL_NET} allow
 
     do-ip6: no
     qname-minimisation: yes
@@ -221,10 +266,213 @@ server:
     cache-max-ttl: 3600
     hide-identity: yes
     hide-version: yes
+
+    # Firefox probes this name to decide whether to switch on its own
+    # DNS-over-HTTPS. NXDOMAIN means "this network filters DNS", and Firefox then
+    # leaves resolution to us instead of tunnelling it to Cloudflare where the
+    # blocklist cannot see it. It has to be answered here rather than in Blocky:
+    # Blocky's blockType is an address, and the canary only reads NXDOMAIN.
+    local-zone: "use-application-dns.net." always_nxdomain
 UNBOUND
 systemctl enable unbound >/dev/null 2>&1 || true
 systemctl restart unbound
-ok "unbound listening inside the tunnel"
+ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}"
+
+# ── Blocky ──────────────────────────────────────────────────────────────────────
+log "Blocky ${BLOCKY_VERSION} (DNS filtering)"
+
+case "$(uname -m)" in
+  aarch64|arm64) BLOCKY_ARCH="arm64" ;;
+  x86_64|amd64)  BLOCKY_ARCH="x86_64" ;;
+  *) echo "No Blocky release for this architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+if [[ -x /usr/local/bin/blocky ]] &&
+   /usr/local/bin/blocky version 2>/dev/null | grep -q "${BLOCKY_VERSION#v}"; then
+  ok "blocky ${BLOCKY_VERSION} already installed"
+else
+  BLOCKY_TMP="$(mktemp -d)"
+  BLOCKY_TGZ="blocky_${BLOCKY_VERSION}_Linux_${BLOCKY_ARCH}.tar.gz"
+  BLOCKY_URL="https://github.com/0xERR0R/blocky/releases/download/${BLOCKY_VERSION}"
+
+  curl -fsSL "${BLOCKY_URL}/${BLOCKY_TGZ}" -o "${BLOCKY_TMP}/${BLOCKY_TGZ}"
+  curl -fsSL "${BLOCKY_URL}/blocky_checksums.txt" -o "${BLOCKY_TMP}/checksums.txt"
+
+  # One checksums file covers every platform, and 'sha256sum -c' fails the whole
+  # file over the twenty archives we did not download — so check only our line.
+  (cd "$BLOCKY_TMP" && grep " ${BLOCKY_TGZ}\$" checksums.txt | sha256sum -c - >/dev/null)
+  ok "checksum verified"
+
+  tar -xzf "${BLOCKY_TMP}/${BLOCKY_TGZ}" -C "$BLOCKY_TMP" blocky
+  install -m 755 "${BLOCKY_TMP}/blocky" /usr/local/bin/blocky
+  rm -rf "$BLOCKY_TMP"
+  ok "blocky installed to /usr/local/bin/blocky"
+fi
+
+id -u blocky >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin -M blocky
+mkdir -p /etc/blocky
+
+cat > /etc/blocky/config.yml <<BLOCKYCONF
+# Managed by ops/provision.sh — re-running the script overwrites this file.
+# The part meant to be edited by hand is /etc/blocky/allowlist.txt, which is not
+# overwritten. See docs/SERVER-OPS.md.
+
+ports:
+  dns:
+    - ${TUNNEL_SERVER_IP}:53
+  # Metrics and the REST API, loopback only and never on the tunnel address: that
+  # API can flush the cache and switch blocking off without authenticating.
+  http: 127.0.0.1:4000
+  # wg0 does not exist yet when Blocky starts at boot, so it has to be allowed to
+  # bind an address that is not there. This is what ip-freebind did for Unbound.
+  freeBind: true
+
+upstreams:
+  groups:
+    default:
+      - tcp+udp:127.0.0.1:${UNBOUND_PORT}
+  # 'strict' keeps every query on our own Unbound. The default, parallel_best,
+  # only means anything with several upstreams, and we deliberately have one — a
+  # fallback to a public resolver here would be a DNS leak, not a safety net.
+  strategy: strict
+  timeout: 5s
+  init:
+    # Do not refuse to start because Unbound is half a second behind us at boot.
+    strategy: fast
+
+# Resolving the blocklist URLs must not fall through to the system resolver,
+# which on Ubuntu is systemd-resolved talking to whatever DHCP handed the host.
+bootstrapDns:
+  - tcp+udp:127.0.0.1:${UNBOUND_PORT}
+
+blocking:
+  denylists:
+    ads:
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+  allowlists:
+    ads:
+      - /etc/blocky/allowlist.txt
+  clientGroupsBlock:
+    default:
+      - ads
+  # 0.0.0.0 rather than NXDOMAIN: in-app ad SDKs tend to retry or hang on
+  # NXDOMAIN, where a dead address fails fast and the app gets on with itself.
+  blockType: zeroIp
+  blockTTL: 1m
+  loading:
+    refreshPeriod: 24h
+    # 'fast' answers queries immediately and loads the lists behind it. A slow or
+    # failed list download must never be able to take DNS down for a whole node:
+    # unfiltered resolution beats no resolution.
+    strategy: fast
+    downloads:
+      timeout: 60s
+      attempts: 3
+      cooldown: 10s
+      # Lists survive a restart and a GitHub outage, and a refresh becomes a
+      # conditional request instead of pulling all three down again.
+      cachePath: /var/cache/blocky/lists
+    concurrency: 4
+
+caching:
+  minTime: 5m
+  maxTime: 30m
+  # The nodes are small. An unbounded cache is the thing that turns a resolver
+  # into the process that OOMs the box.
+  maxItemsCount: 50000
+  prefetching: true
+  cacheTimeNegative: 10m
+
+prometheus:
+  enable: true
+  path: /metrics
+
+# A privacy VPN keeps no record of what its users looked up. 'none' is already
+# the default; it is written out because an omitted section and an empty one are
+# easy to confuse, and one of those logs every query to the journal.
+queryLog:
+  type: none
+
+log:
+  level: info
+  # Domains are obfuscated in the logs, so the journal cannot quietly become the
+  # query log we just turned off.
+  privacy: true
+BLOCKYCONF
+
+if [[ -f /etc/blocky/allowlist.txt ]]; then
+  warn "allowlist.txt exists — keeping it"
+else
+  cat > /etc/blocky/allowlist.txt <<'ALLOWLIST'
+# Domains that are never blocked, even when a denylist contains them.
+# One per line; *.wildcard and /regex/ also work. Lines starting with # are notes.
+#
+# You will need this. Blocklists routinely break payment gateways, delivery
+# tracking and OAuth login flows. When a user reports a broken site, add the
+# domain here and run:  systemctl reload blocky
+ALLOWLIST
+  ok "empty allowlist created at /etc/blocky/allowlist.txt"
+fi
+
+cat > /etc/systemd/system/blocky.service <<'BLOCKYUNIT'
+[Unit]
+Description=Blocky DNS filtering for the Aegis tunnel
+Documentation=https://0xerr0r.github.io/blocky/
+After=network-online.target unbound.service
+# Wants, not Requires: if Unbound dies, Blocky should stay up and keep serving
+# its cache rather than take the tunnel's only resolver down with it.
+Wants=network-online.target unbound.service
+
+[Service]
+ExecStart=/usr/local/bin/blocky --config /etc/blocky/config.yml
+ExecReload=/usr/bin/curl -fsS -X POST http://127.0.0.1:4000/api/lists/refresh
+User=blocky
+Group=blocky
+Restart=on-failure
+RestartSec=5s
+
+# Port 53 without being root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Blocky escalates to nothing, so unlike the API service it can be locked down
+# properly — see the comments in ops/aegis-api.service for why that one cannot.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+CacheDirectory=blocky
+CacheDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target
+BLOCKYUNIT
+
+systemctl daemon-reload
+systemctl enable blocky >/dev/null 2>&1 || true
+systemctl restart blocky || true
+
+# Not fatal to the run, but it is the difference between a node that resolves and
+# one that does not, so it gets said loudly rather than left in the journal.
+if systemctl is-active --quiet blocky; then
+  ok "blocky answering on ${TUNNEL_SERVER_IP}:53"
+else
+  warn "BLOCKY FAILED TO START — there is no resolver in the tunnel. Check:"
+  warn "  journalctl -u blocky -n 50 --no-pager"
+fi
 
 # ── Service account + narrow sudo ───────────────────────────────────────────────
 log "Service account: ${SERVICE_USER}"
@@ -365,6 +613,8 @@ $(printf '\033[1;32m')Provisioning complete.$(printf '\033[0m')
   Interface        ${WG_IF} on ${NIC}
   Listening        ${PUBLIC_IP}:${WG_PORT}/udp
   Tunnel subnet    ${TUNNEL_NET}   DNS ${TUNNEL_SERVER_IP}   MTU ${WG_MTU}
+  Resolver         blocky ${BLOCKY_VERSION} on ${TUNNEL_SERVER_IP}:53 -> unbound 127.0.0.1:${UNBOUND_PORT}
+  Ad blocking      $(systemctl is-active blocky)   (allowlist: /etc/blocky/allowlist.txt)
 
   Server public key (put this in SEED_NODE_PUBLIC_KEY):
     $(cat /etc/wireguard/server.pub)
@@ -381,6 +631,10 @@ Next:
   1. Verify the tunnel with the OFFICIAL WireGuard app before deploying the API:
        sudo bash ops/add-peer.sh test-phone
      Test over MOBILE DATA, not Wi-Fi — most routers do not hairpin NAT.
-  2. Then deploy the API — see docs/DEPLOY.md.
+  2. Check the resolver chain from inside the tunnel, from a connected peer:
+       dig @${TUNNEL_SERVER_IP} example.com          +short   # a real address
+       dig @${TUNNEL_SERVER_IP} doubleclick.net      +short   # must be 0.0.0.0
+     Blocklists load in the background, so give it ~30s after a fresh install.
+  3. Then deploy the API — see docs/DEPLOY.md.
 
 SUMMARY

@@ -162,7 +162,7 @@ git clone <your-repo> /opt/aegis-vpn
 sudo bash /opt/aegis-vpn/ops/provision.sh
 ```
 
-This installs WireGuard, nftables, Unbound, PostgreSQL and the `vpnapi` service
+This installs WireGuard, nftables, Unbound, Blocky, PostgreSQL and the `vpnapi` service
 account, and prints two things you need next: the **server public key** and the
 **`DATABASE_URL`**.
 
@@ -327,7 +327,11 @@ sudo journalctl -u aegis-api -n 20 | grep Reconciled
 | Handshake succeeds, then nothing at all | **AWS: the source/destination check is still enabled.** This is the classic one. Also check `net.ipv4.ip_forward` and the nftables NIC name. |
 | Handshake works, no internet | `net.ipv4.ip_forward`, or the nftables NIC name. `ip -4 route show default` must match the `iifname`/`oifname` in `/etc/nftables.d/aegis-vpn.nft`. |
 | Pings fine, large transfers hang | MTU. Try 1280. |
-| DNS resolves nothing in-tunnel | `systemctl status unbound`. Missing `ip-freebind: yes` makes it fail to bind `10.7.0.1` before wg0 exists. |
+| DNS resolves nothing in-tunnel | `systemctl status blocky` first — Blocky owns `10.7.0.1:53` now, Unbound only listens on `127.0.0.1:5335`. Test the two halves separately: `dig @10.7.0.1 example.com` and `dig @127.0.0.1 -p 5335 example.com`. |
+| Blocky won't start: address not available | `freeBind: true` is missing from `ports:` in `/etc/blocky/config.yml`. `10.7.0.1` does not exist until wg0 is up, and Blocky starts first. |
+| Blocky won't start: address in use | Unbound is still on `10.7.0.1:53` from the pre-Blocky config. Re-run `provision.sh`, which moves it, or check `ss -ulpn | grep :53`. |
+| A legitimate site is broken | A blocklist false positive. Add the domain to `/etc/blocky/allowlist.txt` and `systemctl reload blocky`. See docs/SERVER-OPS.md. |
+| Ads still showing on YouTube/Instagram | Expected and unfixable by DNS — those ads come from the same hostnames as the content. Third-party ads elsewhere should be gone. |
 | `POST /devices` returns 500 | The sudoers rule. `sudo -u vpnapi sudo /usr/bin/wg show wg0` must work without a password prompt. |
 | Every user rate-limited together | `TRUST_PROXY` is not `true`, so all requests key to Caddy's IP. |
 | Peers vanish after a restart | Expected for hand-added peers — they are not in the database. Reconciliation converges `wg0` onto PostgreSQL. |
