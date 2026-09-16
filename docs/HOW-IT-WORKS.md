@@ -94,9 +94,9 @@ Every packet, forever after. **The API is not involved.**
                                        (sees the NODE's IP, not the phone's)
 ```
 
-The reply retraces the path and is encrypted back to that peer. DNS is answered
-inside the tunnel on `10.7.0.1`, so lookups never leak to the local ISP. Two
-processes sit behind that one address:
+The reply retraces the path and is encrypted back to that peer. Where a node runs
+its own resolver, DNS is answered inside the tunnel and lookups never reach the
+local ISP. Two processes sit behind that one address:
 
 ```
 peer ──▶ blocky  10.7.0.1:53 ──▶ unbound  127.0.0.1:5335 ──▶ root servers
@@ -107,6 +107,12 @@ peer ──▶ blocky  10.7.0.1:53 ──▶ unbound  127.0.0.1:5335 ──▶ r
 Blocky answers `0.0.0.0` for anything on its blocklists (~79k domains: ads,
 trackers, telemetry) and passes everything else through. Unbound still does the
 actual resolving, so the "queries never leave the node" property is unchanged.
+
+**This is per-node, and the fleet is not uniform.** A node hands out whatever is
+in its `dns` column. Frankfurt points at its own resolver (`10.9.0.1`); Mumbai
+still points at `1.1.1.1`, so its users resolve through Cloudflare and get no
+filtering, even though the resolver is installed and running on the box. Check
+the column, not the diagram.
 
 This kills third-party ads — the web, and in-app ad SDKs like AdMob and Unity
 Ads. It cannot touch ads served from the same hostname as the content, which is

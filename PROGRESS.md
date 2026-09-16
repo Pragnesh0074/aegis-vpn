@@ -267,6 +267,22 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 ## Known issues / follow-ups
 
+- **Mumbai hands out `1.1.1.1`, so it has no ad blocking yet.** Discovered 2026-09-16
+  while deploying B1: Mumbai was built by hand, never by `provision.sh` (no `inet aegis`
+  nftables table, plain iptables forwarding, Unbound was never installed). The resolver
+  chain is now installed there via the new `ops/install-resolver.sh` and verified —
+  79,158 domains, `doubleclick.net` -> `0.0.0.0` — but `nodes.dns` is still `1.1.1.1`,
+  so it is inert and no user is pointed at it. Frankfurt is `10.9.0.1` and was not
+  touched. Flipping Mumbai's column is the remaining step, and see the next item first.
+- **Existing devices will not pick up a `nodes.dns` change.** `dns` is baked into the
+  config at issuance and read back from the on-device store
+  (`tunnel_controller.dart:38`), so flipping the column only reaches newly issued
+  devices. Current users keep whatever they were given until they re-add the device, or
+  until the app grows a config-refresh path. Decide which before flipping.
+- **`ops/install-resolver.sh` duplicates the Unbound and Blocky config from
+  `provision.sh`.** Verified identical at the time of writing, ignoring comments. Two
+  copies because both scripts have to stay self-contained — the nodes are deployed by
+  copying one file, not by `git pull`. Keep them in sync.
 - **Ad blocking is fleet-wide and always on.** B1 puts Blocky on the tunnel address in
   front of Unbound; there is no per-user switch yet. `nodes.dns` is unchanged, so no
   backend or app change was needed — but it also means a user cannot opt out. The toggle

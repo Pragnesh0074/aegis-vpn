@@ -120,6 +120,27 @@ dig @127.0.0.1 -p 5335 example.com +short # unbound alone; isolates which one br
 dig @10.8.0.1 doubleclick.net +short      # expect 0.0.0.0
 ```
 
+### Installing the resolver on a hand-built node
+
+`provision.sh` assumes it built the node. Mumbai it did not: that box has no
+`inet aegis` nftables table and plain iptables forwarding, so running
+`provision.sh` there would be a *first* run that drops an nftables forward chain
+with `policy drop` on top of a live node and can cut off every connected user.
+
+For those, `ops/install-resolver.sh` installs the chain and nothing else — no
+firewall, no sudoers, no PostgreSQL, no WireGuard:
+
+```bash
+scp -i <key>.pem ops/install-resolver.sh ubuntu@<node>:/home/ubuntu/
+ssh -i <key>.pem ubuntu@<node>
+sudo TUNNEL_SERVER_IP=10.8.0.1 TUNNEL_NET=10.8.0.0/24 \
+  bash /home/ubuntu/install-resolver.sh
+```
+
+It refuses to run if the address is not on `wg0`, or if something already serves
+on that address's port 53. It is **inert** until the node's `dns` column points
+at that address.
+
 ### Unblocking a domain
 
 Blocklists break payment gateways, delivery tracking and OAuth logins regularly.
