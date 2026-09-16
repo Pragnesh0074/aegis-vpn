@@ -153,6 +153,8 @@ class TunnelCard extends ConsumerWidget {
     if (error is TunnelException) {
       return error.isPermissionDenied
           ? 'Permission is needed to create a VPN connection. Tap Connect and allow it.'
+          // Includes the case where the prompt never rendered: error.message
+          // then explains what is blocking it, which retrying will not clear.
           : error.message;
     }
     return 'Could not change the tunnel. Try again.';

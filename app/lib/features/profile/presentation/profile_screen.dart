@@ -9,8 +9,9 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../../health/presentation/widgets/health_card.dart';
+import '../../autoconnect/presentation/auto_connect_controller.dart';
 import '../../killswitch/presentation/kill_switch_controller.dart';
+import '../../splittunnel/presentation/split_tunnel_controller.dart';
 import '../domain/user_profile.dart';
 import 'profile_providers.dart';
 
@@ -34,22 +35,21 @@ class ProfileScreen extends ConsumerWidget {
             children: [
               _IdentityCard(profile: data),
               Gap.md,
-              _DeviceQuotaCard(profile: data),
+              // No device list and no quota. An account holds exactly one peer
+              // — connecting revokes whatever came before it — so a list of one
+              // row that cannot be acted on, above a bar reading "1 of 5", would
+              // describe a product that does not exist yet. The screen and its
+              // route are still here for when it does; see `_ensureDevice` in
+              // `vpn_session.dart`, which is the policy that has to change first.
+              const _ProtectionRow(),
               Gap.md,
-              // The only way to reach the device list now that it is not a tab.
-              // It is a maintenance screen: peers are issued by connecting, so
-              // the reason to come here is to revoke one from a phone that is
-              // gone and free the slot it still occupies.
+              const _SplitTunnelRow(),
+              Gap.md,
               _NavRow(
-                icon: Icons.devices_other,
-                label: 'Devices',
-                trailing: '${data.deviceCount}/${data.maxDevices}',
-                onTap: () => context.go(AppRoutes.devices),
+                icon: Icons.history,
+                label: 'History',
+                onTap: () => context.go(AppRoutes.history),
               ),
-              Gap.md,
-              const _KillSwitchRow(),
-              Gap.md,
-              const HealthCard(),
               Gap.lg,
               const _SignOutButton(),
             ],
@@ -99,75 +99,41 @@ class _IdentityCard extends StatelessWidget {
   }
 }
 
-class _DeviceQuotaCard extends StatelessWidget {
-  const _DeviceQuotaCard({required this.profile});
-
-  final UserProfile profile;
+class _SplitTunnelRow extends ConsumerWidget {
+  const _SplitTunnelRow();
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final used = profile.maxDevices == 0 ? 0.0 : profile.deviceCount / profile.maxDevices;
-
-    return Card(
-      child: Padding(
-        padding: Gap.page,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Devices', style: theme.textTheme.titleSmall),
-            Gap.sm,
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  '${profile.deviceCount}',
-                  style: theme.textTheme.headlineMedium,
-                ),
-                Text(
-                  ' / ${profile.maxDevices}',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-            Gap.sm,
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4.r),
-              child: LinearProgressIndicator(value: used.clamp(0, 1), minHeight: 6.h),
-            ),
-            Gap.sm,
-            Text(
-              profile.hasDeviceCapacity
-                  ? 'Room for ${profile.remainingDevices} more'
-                  : 'Limit reached — remove one below before connecting a new phone',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: profile.hasDeviceCapacity
-                    ? theme.colorScheme.onSurfaceVariant
-                    : theme.colorScheme.error,
-              ),
-            ),
-          ],
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final excluded = ref.watch(excludedAppsProvider).value?.length ?? 0;
+    return _NavRow(
+      icon: Icons.call_split,
+      label: 'Split tunnelling',
+      trailing: excluded == 0 ? 'All apps' : '$excluded excluded',
+      onTap: () => context.go(AppRoutes.splitTunnel),
     );
   }
 }
 
-/// Kill switch entry, showing whether it is on without opening the page.
-class _KillSwitchRow extends ConsumerWidget {
-  const _KillSwitchRow();
+/// One row for both of the settings on the protection page, because a person
+/// looking for either is looking for the same thing: does this stay on.
+class _ProtectionRow extends ConsumerWidget {
+  const _ProtectionRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final enabled = ref.watch(killSwitchControllerProvider).value ?? false;
+    final killSwitch = ref.watch(killSwitchControllerProvider).value ?? false;
+    final autoConnect = ref.watch(autoConnectProvider).value?.enabled ?? false;
+
+    final on = [
+      if (autoConnect) 'Auto-connect',
+      if (killSwitch) 'Kill switch',
+    ];
+
     return _NavRow(
       icon: Icons.shield_outlined,
-      label: 'Kill switch',
-      trailing: enabled ? 'On' : 'Off',
-      onTap: () => context.go(AppRoutes.killSwitch),
+      label: 'Protection',
+      trailing: on.isEmpty ? 'Off' : on.join(' · '),
+      onTap: () => context.go(AppRoutes.protection),
     );
   }
 }

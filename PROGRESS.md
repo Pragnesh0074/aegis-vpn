@@ -4,10 +4,12 @@
 > exists and what comes next. Update it at the end of every chunk, then commit.
 
 **Project:** Aegis VPN — self-hosted WireGuard VPN
-**Scope right now:** backend **done** and one node live. Flutter client **done** and
-**handshaking against the live node**. Next up is the M series: making the control plane
-able to program more than one node. iOS is deliberately deferred.
-**Last updated:** 2026-09-11 (M2 done; kill switch shipped client-side, no backend involvement)
+**Scope right now:** backend **done** and two nodes live. Flutter client **done** and
+**handshaking against the live fleet**. The M series is complete: the control plane
+programs more than one node, and "automatic" now means the node nearest the user
+rather than the emptiest one. iOS is deliberately deferred.
+**Last updated:** 2026-09-15 (M3, last-seen, exit check, split tunnelling, auto-connect,
+history, quick-settings tile, node health + failover)
 
 ---
 
@@ -37,17 +39,44 @@ able to program more than one node. iOS is deliberately deferred.
 | M0 | Node-aware control plane (`WG_NODE_ID`, per-node runner) | ✅ done |
 | M1 | Node agent (entrypoint, `HttpWgRunner`, agent columns, systemd unit) | ✅ done |
 | M2 | Second node (Frankfurt) | ✅ done |
-| M3 | What "automatic" means across countries | ⬜ not started |
+| M3 | What "automatic" means across countries | ✅ done |
 | K1 | Kill switch (auto-reconnect + system lockdown guidance) | ✅ done |
+| D1 | `Device.lastSeenAt` written from peer handshakes | ✅ done |
+| V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done |
+| S1 | Split tunnelling (per-app exclusions) | ✅ done |
+| A1 | Auto-connect on untrusted Wi-Fi | ✅ done |
+| H1 | Session history (on-device) | ✅ done |
+| Q1 | Quick Settings tile | ✅ done |
+| N1 | Node health + failover | ✅ done |
+| B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — not yet deployed |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
 ## Next chunk
 
-**Finish M2.** The Frankfurt exit node is built, provisioned and serving its agent.
-The remaining work is all on the Mumbai side, which was unreachable when this was
-done — every port including 80/443 was closed and ICMP was silent, which points at
-a stopped instance rather than a security-group rule.
+**Deploy what is on this branch.** M3, D1 and V1 are written and tested but only
+against the local suite — none of it has run on Mumbai. Three things have to reach
+the node together:
+
+1. `GET /whoami` is new, and the client calls it on the connect screen. Against a
+   backend without it the call 404s and the card reads "Could not check your exit
+   address", which is honest but useless — so the API goes out before, or with, an
+   app build.
+2. `DEVICE_LAST_SEEN_POLL_SECONDS` is a new env var (default 60). The sweep it
+   drives reads peers **through the registry**, so `WG_NODE_ID` must be set on
+   Mumbai or every sweep logs a warning per node and writes nothing.
+3. Nothing in this branch touches the database schema, so there is no migration.
+
+Then watch one thing on the first run: the sweep asks Frankfurt's agent for its
+peers every 60s over the plaintext, security-group-locked link. That is the first
+recurring API→agent traffic in the system; everything before it was per-request.
+
+**And put S1, A1, H1 and Q1 on a real phone.** None of the four has met a device.
+The things most likely to break there, in order: the location permission flow
+behind auto-connect's SSID read, a tunnel built with a non-empty excluded set,
+whether the in-process network callback fires while the app is backgrounded
+rather than only while it is on screen, and the tile's cold-start path — tapping
+it with the app not running should launch Aegis and connect without a second tap.
 
 ### Fleet as it stands
 
@@ -55,7 +84,7 @@ a stopped instance rather than a security-group rule.
 |---|---|---|
 | id | `501b27c5-59d2-48ac-a4d1-4e2af3a8a86d` | `a0047e7d-2f56-4370-8776-61170ececf9c` |
 | region | `in-mumbai` | `de-frankfurt` |
-| endpoint | `13.126.153.247:51820` | `3.71.204.118:51820` |
+| endpoint | `3.111.32.212:51820` | `3.71.204.118:51820` |
 | subnet | `10.8.0.0/24` | `10.9.0.0/24` |
 | role | control (API + agent-less, programmed locally) | exit (`NODE_ROLE=exit`, agent on :8787) |
 | active | `true` | `true` |
@@ -86,10 +115,28 @@ node chosen.
 `GET /nodes` returns both countries, and the client renders them as India and
 Germany with flags (pinned by `test/unit/fleet_render_test.dart`).
 
-Then **M3**: decide what "automatic" means now that two countries exist.
-`selectLeastLoaded()` sorts by free slots, so it will send a Mumbai user to
-Frankfurt the moment Frankfurt is emptier — under a button the client labels
-"Fastest available".
+### What M3 decided
+
+"Automatic" means **the nearest node with capacity**, ranked on the client from
+the device's UTC offset, and the button says "Closest to you" instead of "Fastest
+available". The app now sends an explicit `nodeId` on `POST /devices` rather than
+letting the server choose; `selectLeastLoaded()` stays as the fallback for a
+request that names no node.
+
+Neither obvious way of doing this properly was available, which is why the answer
+is an estimate:
+
+- **Timing a probe** needs something on the node that answers. WireGuard is silent
+  to unauthenticated packets by design, so `:51820` cannot be timed, and the only
+  other listener is the agent — whose port is locked to the API's address and is
+  not going to be opened to the internet to measure a round trip.
+- **Geolocating the client's address** server-side means shipping a GeoIP database
+  or sending a VPN user's real address to a third-party lookup. The second is
+  disqualified by what this product is for.
+
+So the client estimates a longitude from its own time zone and compares it against
+country centroids, in bands one hour of longitude wide, preferring the emptier node
+within a band. It is coarse and the locations screen says so in as many words.
 
 Also open: **iOS (F7)**, not started on purpose — a Network Extension needs a paid
 organization Apple account. `app/ios/` is the untouched Flutter scaffold, and the
@@ -105,6 +152,40 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 | Date | Decision | Why |
 |------|----------|-----|
+| 2026-09-15 | The account tab **no longer shows devices, the device quota, or API health** | An account holds exactly one peer — connecting revokes whatever came before — so a list of one row that cannot be acted on, above a bar reading "1 of 5", describes a product that does not exist yet. API health is an operator's question, not a user's, and `journalctl` answers it better. The screens and the route are parked rather than deleted: the single-device rule is a decision, not an architecture, and `vpn_session.dart` names the line that changes when a phone and a laptop can share an account |
+| 2026-09-15 | The tunnel moved out of `TunnelBridge` into a process-scoped **`TunnelHost`** | A Quick Settings tile runs in this process with no activity and no Flutter engine, and has to see the tunnel and take it down. It also fixed something already wrong: the interface outlives the activity, so state scoped to an activity could vanish while the thing it described was still carrying traffic |
+| 2026-09-15 | The **kill switch loop moved with it** | Extracting the tunnel alone would have been a regression: the bridge unregisters its listener on dispose, so a kill switch owned by the activity would have stopped rebuilding dropped tunnels the moment that activity was destroyed — exactly when nothing is watching and the feature matters most |
+| 2026-09-15 | The tile toggles directly when it can, and **opens the app when it cannot** | Taking a tunnel down needs only the backend. Bringing one up from nothing means reading a private key out of the keystore and possibly registering a peer, neither of which is reachable without Dart. The app is launched with a request already standing, so it connects on arrival rather than showing a button to tap again |
+| 2026-09-15 | A connect request from the platform is a **standing flag Dart acknowledges**, not an event | A tile tap happens seconds before a Flutter engine exists. A signal the app had to be listening for at that instant would simply be missed; a flag that waits is served by the first thing to look. It also replaced auto-connect's "watch for the timestamp changing", which had the same race on a cold start |
+| 2026-09-15 | The tile sets `userRequestedDown`, like any other deliberate teardown | Otherwise the kill switch would rebuild the tunnel a user had just taken down from the shade, and the tile would look broken in the most visible way possible |
+| 2026-09-15 | **Node health is observed and separate from `Node.active`** | `active` is an operator's intent and is set by hand. Nothing was watching whether a node was actually there, so a node that died stayed in selection: every new device issued on it got a config that could not connect. One flag could not carry both meanings, and an automatic process must not write to a column an operator also edits |
+| 2026-09-15 | The health probe is the **peer sweep that already runs**, not a second poller | Reading a node's peers means reaching it, so the sweep already answers the question. A separate poller would be two things to keep in step and twice the traffic to an agent that is already being asked |
+| 2026-09-15 | Two consecutive failures before a node leaves selection; **one success to return** | A single timeout is the most ordinary thing there is, and treating it as an outage would move users between countries for nothing. Recovery is not symmetrical because a node that answers is answering, and holding it out to be sure would extend an outage that is already over |
+| 2026-09-15 | A node nothing has probed counts as **healthy**, and a fleet that all looks dead is **used anyway** | Health is in-memory, so a restart knows nothing until the first sweep; assuming the worst would turn every restart into an outage. And a whole fleet reading as down is far more likely to be a broken probe than every node being dead |
+| 2026-09-15 | Failover **re-provisions on the next connect**, only on automatic, and never on a fleet list that failed to load | A peer belongs to one node, so a dead node leaves a device unable to connect and unable to move. A location the user picked is theirs to keep — moving them out of a country they chose is worse than a failure with a reason. And revoking a working peer because `GET /nodes` timed out would be the app causing the outage it was routing around |
+| 2026-09-15 | Both protection settings are **armed by the signed-in shell**, not by the account tab | Found while wiring auto-connect, and it was already true of the kill switch: each pushes itself to the platform when its controller first builds, and that build only happened when someone opened Account. A kill switch armed last week was therefore not armed after a restart until the user went and looked at it |
+| 2026-09-15 | Split tunnelling **excludes**, never includes | An allow-list would silently drop every app installed after it was written off the tunnel. Excluding names only what the user chose, so the default for anything new is protected |
+| 2026-09-15 | The picker lists **launcher-visible apps**, via a `<queries>` intent filter rather than `QUERY_ALL_PACKAGES` | That permission needs a Play Store declaration and grants far more visibility than a picker needs. The cost is that a headless app cannot be excluded, which is the right side to err on — the list stays what a person recognises |
+| 2026-09-15 | Excluded packages are **filtered against what is installed** before the config is built | `addDisallowedApplication` throws on a package that is not there, and the throw comes out of `setState` as a failed connect. Without the filter, excluding an app and later uninstalling it would leave the user unable to connect at all |
+| 2026-09-15 | Changing exclusions **does not reconnect**; a banner asks | The set is only applied when an interface is built, so a change mid-session does nothing until a rebuild. Dropping someone's tunnel because they ticked a checkbox is a worse surprise than a banner telling them to |
+| 2026-09-15 | Auto-connect works **only while Aegis is running**, and the card says so | Android does not let an app start a VPN from a cold start, and the config the platform would re-establish is memory-only by an earlier decision. Pretending otherwise would be the kill-switch lie again: a feature someone believes covers them while the app is gone. Android's always-on VPN is the pointer for that case |
+| 2026-09-15 | A Wi-Fi network whose SSID cannot be read counts as **untrusted** | Which is every network until the location permission is granted. Connecting on a network the user trusts wastes a tunnel; not connecting on one they do not is the exposure the feature exists to prevent |
+| 2026-09-15 | Auto-connect fires on **arriving at a network**, not on the tunnel being down | Otherwise the user could never disconnect while sitting on an untrusted network — every teardown would be undone by the next capability change, a fight the app always wins and the user always loses |
+| 2026-09-15 | The platform brings the tunnel up itself when it holds a config, and **asks Dart** when it does not | A cold process has nothing to re-establish and needs a peer provisioned first, which only Dart can do. The request rides in the status snapshot as a timestamp, and a *change* in it is the signal — so a replayed snapshot cannot fire a second connect |
+| 2026-09-15 | Session history is **on-device only**, in the keystore, capped at 50 | A record of when someone used a VPN and how much moved through it is exactly the log this product exists so that nobody else keeps. The cap is because the whole list is serialised on every write |
+| 2026-09-15 | Session totals are **accumulated while the tunnel is up**, across interface rebuilds | The platform reports zeroes once the interface is gone, so reading the closing snapshot would file every session as having carried nothing; and WireGuard's counters restart at zero on the rebuilds the kill switch performs routinely, so the last reading alone would report only what moved since the final reconnect |
+| 2026-09-15 | The kill switch page became the **Protection** page | Auto-connect answers the other half of the same question — one brings a tunnel back, the other brings one up that was never there — and both have a limit Android imposes that has to be stated next to the toggle |
+| 2026-09-15 | **"Automatic" is decided on the client**, which sends an explicit `nodeId`; `selectLeastLoaded()` is now only the fallback | The server cannot know where a client is without geolocating its address, which is the one lookup a VPN should not perform. The client already had to rank the fleet to put a country on the connect screen, so leaving the decision on the server meant the screen predicted one node and the server chose another — and they disagreed precisely when the fleet was busy |
+| 2026-09-15 | Nearness is **estimated from the device's UTC offset**, not measured | Neither measurement was available. WireGuard answers no unauthenticated packet, so `:51820` cannot be timed; the only other listener on an exit node is the agent, whose port is security-group-locked to the API and must not be opened to the world to time a round trip. A time zone needs no permission, works offline, and is a real signal of physical position |
+| 2026-09-15 | Longitude only, against **country centroids**, in 15° bands with load as the tie-break | East-west distance dominates intercontinental latency, and a time zone gives longitude and nothing else. Mixing in a latitude guessed from the device locale would dress a worse signal up as precision. Within a band the estimate cannot tell two nodes apart, so load decides — which keeps the spreading that automatic did before |
+| 2026-09-15 | The button reads **"Closest to you"**, with a caption saying it is estimated and not measured | Renaming was half the fix. "Fastest available" over a rule that never timed anything is the same class of lie as a shield badge over an unverified tunnel |
+| 2026-09-15 | An automatic pick that 404s or 503s **retries once with no `nodeId`** | The fleet it was ranked against is cached, so the node can have been deactivated or filled since. A user who asked for automatic should not be told their location is gone. A location they picked themselves does surface the error, because silently moving someone out of the country they chose is worse |
+| 2026-09-15 | `Device.lastSeenAt` is written by **polling `wg show dump`**, forward-only | A peer never checks in with the API — it talks to a kernel interface that does not know the API exists — so a poll is the only way this reaches the database. Forward-only because a node rebuilt from its config has no handshake history, and a live device must not be reported as having gone quiet because its interface forgot |
+| 2026-09-15 | The sweep treats each node independently and counts failures rather than throwing | One unreachable agent must not cost the rest of the fleet its timestamps |
+| 2026-09-15 | `GET /whoami` is `@Public()` | It is called at the two moments an access token is least reliable — just after the interface comes up, and while a refresh is in flight over a route that just changed. Turning "am I protected?" into a 401 is the least useful possible answer, and the endpoint reveals only the caller's own address |
+| 2026-09-15 | Tunnelled traffic is recognised by the node's **endpoint IP or its tunnel subnet** | Two different paths reach the API: a client behind a remote node arrives SNATed as that node's public address, while a client on the node the API itself runs on arrives from `10.8.0.x` with no NAT at all. Matching only the first would report a leak for every Mumbai user |
+| 2026-09-15 | A node whose egress address differs from its endpoint reads as **not tunnelled** | The false negative is deliberate: it warns a protected user rather than reassuring an exposed one. Fixed by making the node row's endpoint match the address it actually egresses as |
+| 2026-09-15 | `/whoami` is left on the **default throttle**, not given a tighter one | Every client connected through a node shares that node's source address, so a strict per-IP limit would let one user's checks lock out everyone else's |
 | 2026-09-11 | The kill switch is **client-only; the backend has no part in it** | It is a device-local network policy. No endpoint, table or config would make it work, and syncing the preference across a user's devices is arguably wrong — lockdown on a phone does not imply lockdown on a laptop. An endpoint was not added rather than invent a backend role for a client feature |
 | 2026-09-11 | On Android an app **cannot** block traffic while the tunnel is down, so the feature is split in two | Only the system's "Block connections without VPN" does that, and it is deliberately not app-settable. Aegis therefore ships rebuild-on-drop, which it can do, and hands the user to VPN settings for the part it cannot. The screen says which is which — a toggle labelled "kill switch" that silently only reconnects would let someone believe they were covered with the app closed |
 | 2026-09-11 | Rebuild-on-drop lives in `TunnelBridge`, not in Dart | The drops worth surviving are the ones where the Dart isolate is not running: app backgrounded, engine suspended, OS reclaiming the interface. A reconnect loop in the UI layer only works while someone is watching it |
@@ -186,6 +267,24 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 ## Known issues / follow-ups
 
+- **Ad blocking is fleet-wide and always on.** B1 puts Blocky on the tunnel address in
+  front of Unbound; there is no per-user switch yet. `nodes.dns` is unchanged, so no
+  backend or app change was needed — but it also means a user cannot opt out. The toggle
+  wants a second resolver address per node (`nodes.dnsBlocking`) plus `Device.adBlock`,
+  and a tunnel rebuild on flip, because `DNS =` lives in the WireGuard `[Interface]`.
+- **DNS blocking is bypassable, and the obvious holes are still open.** A client with a
+  hardcoded `8.8.8.8`, or Android's Private DNS set to a provider hostname, never reaches
+  Blocky. The fix is nftables on the node — DNAT tunnel traffic on port 53 to the node's
+  own resolver and reject 853 — which is not done. The Firefox DoH canary *is* handled
+  (`use-application-dns.net` NXDOMAINs in Unbound).
+- **Blocky is a new single point of failure for DNS.** If it does not start, the tunnel
+  comes up and resolves nothing. `loading.strategy: fast` means a failed blocklist
+  download degrades to unfiltered rather than to dead, and the rollback is in
+  docs/SERVER-OPS.md, but nothing alerts on it yet.
+- **"Ads blocked" counter does not exist.** Users expect the number. Blocky's Prometheus
+  endpoint on `127.0.0.1:4000` has fleet totals, not per-device ones; per-device counts
+  mean query logging, which is off deliberately on a privacy VPN. Needs a decision.
+
 - **No local Postgres.** Docker is not installed on this Mac, so the app has not yet been
   booted end to end. `npm run build` passes and the env-validation logic is verified, but
   `/health`, migrations and the seed are untested against a live database. Install Docker
@@ -223,8 +322,55 @@ Append here as decisions are made, so a later session does not re-litigate them.
   caching the user lookup, before this carries real traffic.
 - Supabase free-tier projects pause after ~7 days of inactivity; the first request
   after that will time out until the project resumes.
-- No `updateLastSeen` yet: `Device.lastSeenAt` is never written. Wire it to
-  `wg show dump` handshake timestamps in a later chunk (useful for "device inactive").
+- ~~No `updateLastSeen`~~ — **closed** by `LastSeenService`, which sweeps every
+  active node's peers on `DEVICE_LAST_SEEN_POLL_SECONDS` (default 60) and moves
+  `Device.lastSeenAt` forward from the handshake timestamps.
+- **Tunnelled clients share one source address at the API.** Everyone exiting
+  through Frankfurt reaches the API as `3.71.204.118`, so the per-IP throttler
+  counts them as a single caller — the global 120/min is effectively shared by
+  that node's whole user base. Not introduced by `/whoami`, but that endpoint is
+  the first one a client calls repeatedly, so it will be where this shows up.
+  Mumbai users are unaffected while the API runs on the same host (they arrive
+  from distinct `10.8.0.x` addresses). The fix is keying the throttler on the
+  authenticated user where there is one.
+- **Node nearness is country-resolution.** `RegionGeo` carries one longitude per
+  country, so two nodes in the same country — or two US nodes on opposite coasts —
+  are indistinguishable to the ranking and fall through to load. Add a city table
+  when a fleet actually has that shape.
+- **Node health only sees the control plane.** The probe reaches a node's agent
+  (or runs `wg show` locally), so it detects a box that is down, an agent that is
+  not running, or a security group that changed. It does **not** detect a node
+  whose agent answers while its data plane is broken — a NAT rule gone, the AWS
+  source/destination check re-enabled, upstream transit down. Those still surface
+  only through the client's exit check.
+- **Health is in-memory and per-process.** A second API instance would keep its
+  own view, and a restart re-learns everything within one sweep. Fine for one
+  instance; it becomes a shared-state problem at the same moment the throttler
+  does.
+- **Auto-connect's network callback still unregisters with the activity.** The
+  kill switch now survives an activity being destroyed; auto-connect does not.
+  It matters less — a tunnel that is up is what keeps the process alive, and
+  auto-connect has nothing to do while one is — but the two are inconsistent.
+- **The split-tunnel picker has no app icons.** Pulling a bitmap per app across
+  the platform channel costs more than the picker is worth, so a letter avatar
+  stands in. A lazy per-row `appIcon(package)` call is the fix if it starts to
+  matter.
+- **Auto-connect does not survive the process being killed.** It registers an
+  in-process network callback, so a phone that has been rebooted or had Aegis
+  swiped away will not connect on its own. A `PendingIntent`-based callback plus
+  a receiver might reach further, but starting a VpnService from the background
+  runs into Android 12's foreground-service restrictions and none of it can be
+  verified without a device. The card states the limit rather than implying
+  coverage that is not there.
+- **None of S1, A1 or H1 has run on a device.** The Kotlin compiles and the Dart
+  side is covered by unit and widget tests against fakes, but no real
+  `PackageManager`, no real Wi-Fi transition and no real excluded-app tunnel has
+  been exercised. The permission flow in particular (location, then an SSID read)
+  is the part most likely to need a fix on first contact.
+- **The handshake sweep needs `WG_NODE_ID`.** It reads peers through
+  `WgRunnerRegistry`, which refuses to guess which interface this host owns once a
+  second node is active. Without it every sweep logs a warning per node and writes
+  nothing.
 
 ---
 
@@ -234,4 +380,4 @@ Append here as decisions are made, so a later session does not re-litigate them.
 - Payments / RevenueCat, subscription tiers
 - Multi-region + separate `node-agent` control plane
 - Per-user bandwidth metering and quota enforcement
-- Split tunnelling, kill switch, on-demand connect
+- ~~Split tunnelling, kill switch, on-demand connect~~ — all three shipped (S1, K1, A1)

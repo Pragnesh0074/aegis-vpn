@@ -46,6 +46,11 @@ export const envSchema = z
 
     MAX_DEVICES_PER_USER: z.coerce.number().int().min(1).max(100).default(5),
 
+    // How often the API asks every active node which peers have handshaked, so
+    // `Device.lastSeenAt` means something. Each sweep is one `wg show dump` per
+    // node plus one indexed query, so a short interval is cheap; 0 turns it off.
+    DEVICE_LAST_SEEN_POLL_SECONDS: z.coerce.number().int().min(0).max(3600).default(60),
+
     WG_INTERFACE: z.string().regex(IFACE, 'invalid interface name').default('wg0'),
     WG_RUNNER: z.enum(['exec', 'fake']).default('fake'),
     WG_BINARY: z.string().default('/usr/bin/wg'),

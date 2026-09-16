@@ -1,23 +1,39 @@
 import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../autoconnect/domain/wifi_network.dart';
 import '../../devices/domain/device_config.dart';
+import '../../splittunnel/domain/installed_app.dart';
 import '../domain/tunnel_status.dart';
 
 part 'tunnel_channel.g.dart';
 
 /// Raised when the platform refuses to start a tunnel.
 ///
-/// Separate from a generic PlatformException so the UI can tell the one case a
-/// person can fix — declining the system VPN consent dialog — from the ones they
-/// cannot.
+/// Separate from a generic PlatformException so the UI can tell the cases a
+/// person can act on from the ones they cannot — and, among those, tell the two
+/// permission failures apart. They look identical from Dart but need opposite
+/// advice: one asks the user to tap connect again, the other tells them that
+/// tapping again will achieve nothing.
 class TunnelException implements Exception {
-  const TunnelException(this.message, {this.isPermissionDenied = false});
+  const TunnelException(
+    this.message, {
+    this.isPermissionDenied = false,
+    this.isPermissionUnavailable = false,
+  });
 
   final String message;
 
-  /// True when the OS consent prompt was dismissed. Retrying is meaningful.
+  /// True when the OS consent prompt was shown and dismissed. Retrying is
+  /// meaningful: the prompt will appear again.
   final bool isPermissionDenied;
+
+  /// True when the prompt never appeared, because the OS refused to show it —
+  /// another VPN holds the always-on slot, VPN access for this app is blocked,
+  /// or the ROM has no consent activity at all. Retrying changes nothing, so the
+  /// message has to name what to go and fix. [message] carries the platform's
+  /// own wording, which is more specific than anything Dart can infer.
+  final bool isPermissionUnavailable;
 
   @override
   String toString() => message;
@@ -62,9 +78,11 @@ class TunnelChannel {
   Future<void> connect({
     required DeviceConfig config,
     required String privateKey,
+    List<String> excludedApps = const [],
   }) async {
     try {
       await _methods.invokeMethod<void>('connect', {
+        'excludedApps': excludedApps,
         'deviceId': config.deviceId,
         'name': config.name,
         'privateKey': privateKey,
@@ -80,6 +98,9 @@ class TunnelChannel {
       throw TunnelException(
         e.message ?? 'The tunnel could not be started.',
         isPermissionDenied: e.code == 'permission_denied',
+        // 'permission_pending' is deliberately neither: a consent dialog is
+        // already up, so there is nothing for the user to do but answer it.
+        isPermissionUnavailable: e.code == 'permission_unavailable',
       );
     }
   }
@@ -102,6 +123,95 @@ class TunnelChannel {
       await _methods.invokeMethod<void>('setKillSwitch', {'enabled': enabled});
     } on PlatformException catch (e) {
       throw TunnelException(e.message ?? 'The kill switch could not be changed.');
+    }
+  }
+
+  /// Every launcher-visible app on the device, for the split-tunnel picker.
+  ///
+  /// Empty on a platform that does not implement it, rather than throwing: a
+  /// picker with nothing in it is a screen that explains itself, while an
+  /// exception here would take the settings page down with it.
+  Future<List<InstalledApp>> listApps() async {
+    try {
+      final raw = await _methods.invokeListMethod<Object?>('listApps');
+      return (raw ?? const [])
+          .map((row) => InstalledApp.fromJson(Map<String, dynamic>.from(row! as Map)))
+          .toList(growable: false);
+    } on PlatformException {
+      return const [];
+    } on MissingPluginException {
+      return const [];
+    }
+  }
+
+  /// Arms or disarms auto-connect, and replaces the trusted network list.
+  ///
+  /// Both go in one call because they are one setting to the platform: the
+  /// trusted list is meaningless without the flag, and a flag armed against a
+  /// stale list would connect on a network the user had just trusted.
+  Future<void> setAutoConnect({
+    required bool enabled,
+    required List<String> trusted,
+  }) async {
+    try {
+      await _methods.invokeMethod<void>('setAutoConnect', {
+        'enabled': enabled,
+        'trusted': trusted,
+      });
+    } on PlatformException catch (e) {
+      throw TunnelException(e.message ?? 'Auto-connect could not be changed.');
+    }
+  }
+
+  /// The Wi-Fi network this device is on, for the "trust this network" button.
+  Future<WifiNetwork> currentWifi() async {
+    try {
+      final raw = await _methods.invokeMapMethod<String, dynamic>('currentWifi');
+      if (raw == null) return WifiNetwork.unknown;
+      return WifiNetwork.fromJson(raw);
+    } on PlatformException {
+      return WifiNetwork.unknown;
+    } on MissingPluginException {
+      return WifiNetwork.unknown;
+    }
+  }
+
+  /// Asks for the location permission Android requires before it will name a
+  /// Wi-Fi network. Returns whether it is granted afterwards.
+  Future<bool> requestWifiPermission() async {
+    try {
+      return await _methods.invokeMethod<bool>('requestWifiPermission') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Tells the platform its connect request has been acted on.
+  ///
+  /// The request outlives the app deliberately, so something has to spend it.
+  /// Acknowledged on the attempt rather than on success: a request that keeps
+  /// failing would otherwise be retried for as long as the app stayed open.
+  Future<void> ackConnectRequest() async {
+    try {
+      await _methods.invokeMethod<void>('ackConnectRequest');
+    } on PlatformException {
+      // Nothing useful to do. The next request supersedes this one.
+    } on MissingPluginException {
+      // No platform implementation; there was nothing to acknowledge.
+    }
+  }
+
+  /// Asks Android to offer the user the Quick Settings tile.
+  ///
+  /// False when the device declined, the user declined, or the platform is older
+  /// than Android 13 — where a tile exists but can only be added by hand.
+  Future<bool> requestAddTile() async {
+    try {
+      return await _methods.invokeMethod<bool>('requestAddTile') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

@@ -43,7 +43,7 @@ class RegionGeo {
 
   /// The name to headline a location with. Falls back to the raw region so an
   /// unparsed value is still identifiable rather than blank.
-  String get countryName => _countries[countryCode] ?? raw;
+  String get countryName => _countries[countryCode]?.name ?? raw;
 
   /// Regional-indicator pair, or null when there is no country to draw.
   ///
@@ -61,6 +61,17 @@ class RegionGeo {
     ]);
   }
 
+  /// Rough east-west position of this country, in degrees, or null when the
+  /// region named no country we know.
+  ///
+  /// A country centroid, not the node's city: the United States is one number
+  /// here and a node in Oregon reads the same as one in Virginia. That is the
+  /// resolution this is used at — see `NodeRanking`, which buckets nodes into
+  /// bands an hour of longitude wide before it prefers one over another — and a
+  /// city table would be a second thing to keep in step with the fleet for no
+  /// change in the answer.
+  double? get longitude => countryCode == null ? null : _countries[countryCode]?.longitude;
+
   /// Sort key for a location list. Named countries first and alphabetical,
   /// then the unparsed regions, so a misconfigured node lands at the bottom
   /// instead of scattered through the list.
@@ -77,59 +88,63 @@ class RegionGeo {
   /// Deliberately not the full ISO list. These are the countries a small VPN
   /// fleet plausibly sits in; anything else falls through to the raw region,
   /// which is the honest rendering for a code we cannot name.
-  static const _countries = <String, String>{
-    'AE': 'United Arab Emirates',
-    'AR': 'Argentina',
-    'AT': 'Austria',
-    'AU': 'Australia',
-    'BE': 'Belgium',
-    'BG': 'Bulgaria',
-    'BR': 'Brazil',
-    'CA': 'Canada',
-    'CH': 'Switzerland',
-    'CL': 'Chile',
-    'CZ': 'Czechia',
-    'DE': 'Germany',
-    'DK': 'Denmark',
-    'EE': 'Estonia',
-    'ES': 'Spain',
-    'FI': 'Finland',
-    'FR': 'France',
-    'GB': 'United Kingdom',
-    'GR': 'Greece',
-    'HK': 'Hong Kong',
-    'HU': 'Hungary',
-    'ID': 'Indonesia',
-    'IE': 'Ireland',
-    'IL': 'Israel',
-    'IN': 'India',
-    'IS': 'Iceland',
-    'IT': 'Italy',
-    'JP': 'Japan',
-    'KR': 'South Korea',
-    'LT': 'Lithuania',
-    'LU': 'Luxembourg',
-    'LV': 'Latvia',
-    'MX': 'Mexico',
-    'MY': 'Malaysia',
-    'NL': 'Netherlands',
-    'NO': 'Norway',
-    'NZ': 'New Zealand',
-    'PH': 'Philippines',
-    'PL': 'Poland',
-    'PT': 'Portugal',
-    'RO': 'Romania',
-    'RS': 'Serbia',
-    'SA': 'Saudi Arabia',
-    'SE': 'Sweden',
-    'SG': 'Singapore',
-    'SK': 'Slovakia',
-    'TH': 'Thailand',
-    'TR': 'Turkey',
-    'TW': 'Taiwan',
-    'UA': 'Ukraine',
-    'US': 'United States',
-    'VN': 'Vietnam',
-    'ZA': 'South Africa',
+  ///
+  /// The longitude is a country centroid, carried here because it is the one
+  /// coordinate the app can compare a device against without asking for a
+  /// location permission — see [longitude].
+  static const _countries = <String, ({String name, double longitude})>{
+    'AE': (name: 'United Arab Emirates', longitude: 54.0),
+    'AR': (name: 'Argentina', longitude: -64.0),
+    'AT': (name: 'Austria', longitude: 14.5),
+    'AU': (name: 'Australia', longitude: 134.0),
+    'BE': (name: 'Belgium', longitude: 4.5),
+    'BG': (name: 'Bulgaria', longitude: 25.5),
+    'BR': (name: 'Brazil', longitude: -51.0),
+    'CA': (name: 'Canada', longitude: -106.0),
+    'CH': (name: 'Switzerland', longitude: 8.2),
+    'CL': (name: 'Chile', longitude: -71.0),
+    'CZ': (name: 'Czechia', longitude: 15.5),
+    'DE': (name: 'Germany', longitude: 10.5),
+    'DK': (name: 'Denmark', longitude: 10.0),
+    'EE': (name: 'Estonia', longitude: 26.0),
+    'ES': (name: 'Spain', longitude: -3.7),
+    'FI': (name: 'Finland', longitude: 26.0),
+    'FR': (name: 'France', longitude: 2.2),
+    'GB': (name: 'United Kingdom', longitude: -2.0),
+    'GR': (name: 'Greece', longitude: 22.0),
+    'HK': (name: 'Hong Kong', longitude: 114.2),
+    'HU': (name: 'Hungary', longitude: 19.5),
+    'ID': (name: 'Indonesia', longitude: 113.0),
+    'IE': (name: 'Ireland', longitude: -8.0),
+    'IL': (name: 'Israel', longitude: 35.0),
+    'IN': (name: 'India', longitude: 79.0),
+    'IS': (name: 'Iceland', longitude: -19.0),
+    'IT': (name: 'Italy', longitude: 12.5),
+    'JP': (name: 'Japan', longitude: 138.0),
+    'KR': (name: 'South Korea', longitude: 127.8),
+    'LT': (name: 'Lithuania', longitude: 24.0),
+    'LU': (name: 'Luxembourg', longitude: 6.1),
+    'LV': (name: 'Latvia', longitude: 24.9),
+    'MX': (name: 'Mexico', longitude: -102.0),
+    'MY': (name: 'Malaysia', longitude: 102.0),
+    'NL': (name: 'Netherlands', longitude: 5.3),
+    'NO': (name: 'Norway', longitude: 9.0),
+    'NZ': (name: 'New Zealand', longitude: 174.0),
+    'PH': (name: 'Philippines', longitude: 122.0),
+    'PL': (name: 'Poland', longitude: 19.4),
+    'PT': (name: 'Portugal', longitude: -8.2),
+    'RO': (name: 'Romania', longitude: 25.0),
+    'RS': (name: 'Serbia', longitude: 21.0),
+    'SA': (name: 'Saudi Arabia', longitude: 45.0),
+    'SE': (name: 'Sweden', longitude: 16.0),
+    'SG': (name: 'Singapore', longitude: 103.8),
+    'SK': (name: 'Slovakia', longitude: 19.7),
+    'TH': (name: 'Thailand', longitude: 101.0),
+    'TR': (name: 'Turkey', longitude: 35.0),
+    'TW': (name: 'Taiwan', longitude: 121.0),
+    'UA': (name: 'Ukraine', longitude: 31.2),
+    'US': (name: 'United States', longitude: -98.5),
+    'VN': (name: 'Vietnam', longitude: 108.3),
+    'ZA': (name: 'South Africa', longitude: 24.7),
   };
 }

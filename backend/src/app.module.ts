@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module';
 import { NodesModule } from './nodes/nodes.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
+import { WhoamiModule } from './whoami/whoami.module';
 import { WireguardModule } from './wireguard/wireguard.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { WireguardModule } from './wireguard/wireguard.module';
     NodesModule,
     WireguardModule,
     DevicesModule,
+    WhoamiModule,
   ],
   providers: [
     // Order matters: global guards run in registration order, so rate limiting is

@@ -5,19 +5,26 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
+import '../../autoconnect/presentation/widgets/auto_connect_card.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import 'kill_switch_controller.dart';
 
-/// The kill switch, and an honest account of what it can and cannot do.
+/// Everything that decides when the tunnel is up without the user tapping the
+/// button — and an honest account of what each part cannot do.
 ///
-/// The explanation is not padding. "Kill switch" in most VPN apps means traffic
-/// is blocked whenever the tunnel is down, and on Android an app simply cannot
-/// do that — only the system can, through a setting no app may enable for
+/// Three cards, in the order the gaps appear. Auto-connect brings a tunnel up
+/// that was never running; the kill switch rebuilds one that dropped; Android's
+/// own setting is the only thing that blocks traffic when neither worked.
+///
+/// The explanations are not padding. "Kill switch" in most VPN apps means
+/// traffic is blocked whenever the tunnel is down, and on Android an app simply
+/// cannot do that — only the system can, through a setting no app may enable for
 /// itself. Shipping a toggle called "kill switch" without saying so would let
 /// someone believe they are covered when the app is closed, which is precisely
-/// when they are not.
-class KillSwitchScreen extends ConsumerWidget {
-  const KillSwitchScreen({super.key});
+/// when they are not. Auto-connect has the same shape of limit and gets the same
+/// treatment.
+class ProtectionScreen extends ConsumerWidget {
+  const ProtectionScreen({super.key});
 
   Future<void> _toggle(BuildContext context, WidgetRef ref, bool enabled) async {
     try {
@@ -48,13 +55,15 @@ class KillSwitchScreen extends ConsumerWidget {
     final armed = ref.watch(tunnelStatusStreamProvider).value?.killSwitch ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Kill switch')),
+      appBar: AppBar(title: const Text('Protection')),
       body: AsyncView(
         value: setting,
         onRetry: () => ref.invalidate(killSwitchControllerProvider),
         data: (enabled) => ListView(
           padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 32.h),
           children: [
+            const AutoConnectCard(),
+            Gap.md,
             _ReconnectCard(
               enabled: enabled,
               armed: armed,
@@ -63,9 +72,73 @@ class KillSwitchScreen extends ConsumerWidget {
             Gap.md,
             _SystemLockdownCard(onOpen: () => _openSystemSettings(context, ref)),
             Gap.md,
+            const _QuickTileCard(),
+            Gap.md,
             const _WhatIsProtected(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Offers the pull-down tile.
+///
+/// The tile exists whether or not anyone ever taps this — it is declared in the
+/// manifest — but a tile nobody has added is a tile nobody knows about, and
+/// editing the shade by hand is not something people do. Android draws its own
+/// prompt; an app is not allowed to add one for itself.
+class _QuickTileCard extends ConsumerWidget {
+  const _QuickTileCard();
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final added = await ref.read(tunnelChannelProvider).requestAddTile();
+    if (!context.mounted) return;
+
+    showMessage(
+      context,
+      added
+          ? 'Added. Pull down and tap Aegis to connect.'
+          : 'Not added. On Android 12 and earlier, pull down the shade, edit the '
+              'tiles and drag Aegis in.',
+      isError: !added,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Container(
+      padding: EdgeInsets.all(16.r),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Connect from the pull-down shade',
+            style: TextStyle(
+              fontSize: 14.5.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textHigh,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            'A Quick Settings tile, next to Wi-Fi and Bluetooth. Two swipes '
+            'instead of opening the app. Disconnecting always works from there; '
+            'connecting opens Aegis if it has to set a peer up first.',
+            style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+          ),
+          SizedBox(height: 12.h),
+          OutlinedButton.icon(
+            onPressed: () => _add(context, ref),
+            icon: Icon(Icons.add_to_home_screen, size: 17.r),
+            label: const Text('Add the tile'),
+          ),
+        ],
       ),
     );
   }

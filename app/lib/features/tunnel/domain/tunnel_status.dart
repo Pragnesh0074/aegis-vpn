@@ -59,6 +59,9 @@ class TunnelStatus {
     this.stats = TunnelStats.zero,
     this.error,
     this.killSwitch = false,
+    this.autoConnect = false,
+    this.connectRequestedAt,
+    this.hasWifiPermission = false,
   });
 
   final TunnelState state;
@@ -77,6 +80,27 @@ class TunnelStatus {
   /// applied to the platform on launch, and until that lands the stored
   /// preference is a promise rather than a fact.
   final bool killSwitch;
+
+  /// Whether the platform is watching for untrusted Wi-Fi. Same reasoning as
+  /// [killSwitch]: what is armed, not what was asked for.
+  final bool autoConnect;
+
+  /// An outstanding request from the platform for the app to connect.
+  ///
+  /// Set by the two things that can want a tunnel without being able to build
+  /// one: auto-connect holding no config, and the Quick Settings tile on a cold
+  /// start. Building one from nothing means reading a private key out of the
+  /// keystore and possibly registering a peer, neither of which the platform can
+  /// reach.
+  ///
+  /// It stays set until the app acknowledges it, rather than being a one-shot
+  /// signal. A tile tap happens before a Flutter engine exists, so anything the
+  /// app had to be listening for at that instant would simply be missed.
+  final DateTime? connectRequestedAt;
+
+  /// Whether Android will name the Wi-Fi network this device is on. Without it
+  /// auto-connect treats every network as untrusted.
+  final bool hasWifiPermission;
 
   static const disconnected = TunnelStatus(state: TunnelState.disconnected);
 
@@ -102,6 +126,12 @@ class TunnelStatus {
       ),
       error: json['error'] as String?,
       killSwitch: json['killSwitch'] as bool? ?? false,
+      autoConnect: json['autoConnect'] as bool? ?? false,
+      connectRequestedAt: switch (json['connectRequestedAt']) {
+        final num ms when ms > 0 => DateTime.fromMillisecondsSinceEpoch(ms.toInt()),
+        _ => null,
+      },
+      hasWifiPermission: json['wifiPermission'] as bool? ?? false,
     );
   }
 }

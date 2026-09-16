@@ -4,7 +4,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../autoconnect/presentation/auto_connect_controller.dart';
+import '../../history/presentation/session_recorder.dart';
+import '../../killswitch/presentation/kill_switch_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
+import '../../tunnel/presentation/platform_connect_watcher.dart';
 
 /// Bottom-nav shell for the signed-in app.
 ///
@@ -17,6 +21,27 @@ class HomeShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Four things that have to be alive for as long as there is a session, and
+    // only while there is one. None of them draws anything. Mounted here because
+    // this shell is the whole of the signed-in app — put them on the connect
+    // screen and they would stop the moment someone opened another tab.
+    //
+    // The two settings are here for a reason worth stating: both live natively
+    // as process state, and both are pushed down to the platform when their
+    // controller first builds. Until this was watched here, that first build
+    // happened when the account tab was opened — so a kill switch someone armed
+    // last week was not armed again after a restart until they happened to go
+    // and look at it. A protection setting that is silently absent is the one
+    // failure this app has repeatedly said it will not ship.
+    ref
+      ..watch(killSwitchControllerProvider)
+      ..watch(autoConnectProvider)
+      // Turns finished tunnels into history rows.
+      ..watch(sessionRecorderProvider)
+      // Serves a connect the platform asked for but could not perform: a tile
+      // tapped on a cold start, or auto-connect holding no config.
+      ..watch(platformConnectWatcherProvider);
+
     // The shield tints while the tunnel is up, so the state is legible from any
     // tab without having to go back to the connect screen.
     final status = ref.watch(tunnelStatusStreamProvider).value;

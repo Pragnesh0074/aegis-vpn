@@ -81,6 +81,18 @@ class LocationTile extends StatelessWidget {
                 SizedBox(width: 10.w),
                 if (selected)
                   Icon(Icons.check_circle_rounded, size: 20.r, color: AppColors.accent)
+                else if (!location.healthy)
+                  // Not "Full": a country that is full will free up on its own
+                  // and one that has fallen over will not, so telling someone
+                  // the wrong one sends them to wait for nothing.
+                  Text(
+                    'Offline',
+                    style: TextStyle(
+                      fontSize: 11.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.danger,
+                    ),
+                  )
                 else if (!location.available)
                   Text(
                     'Full',

@@ -21,4 +21,7 @@ abstract final class ApiEndpoints {
 
   // health.controller.ts
   static const health = '/health';
+
+  // whoami.controller.ts
+  static const whoami = '/whoami';
 }

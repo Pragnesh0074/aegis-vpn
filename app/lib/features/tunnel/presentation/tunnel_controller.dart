@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure_log.dart';
 import '../../devices/data/device_key_store.dart';
+import '../../splittunnel/data/excluded_apps_store.dart';
 import '../data/tunnel_channel.dart';
 import '../data/tunnel_config_store.dart';
 import '../domain/tunnel_status.dart';
@@ -44,9 +45,16 @@ class TunnelController extends _$TunnelController {
         );
       }
 
-      await ref
-          .read(tunnelChannelProvider)
-          .connect(config: config, privateKey: privateKey);
+      // Read from the store rather than the notifier: the excluded set is only
+      // ever applied when an interface is built, so the value that counts is
+      // whatever is on disk at this instant, not whatever a screen last drew.
+      final excluded = await ref.read(excludedAppsStoreProvider).read();
+
+      await ref.read(tunnelChannelProvider).connect(
+            config: config,
+            privateKey: privateKey,
+            excludedApps: excluded.toList(),
+          );
       await ref.read(tunnelConfigStoreProvider).saveSelectedDeviceId(deviceId);
     });
 

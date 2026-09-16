@@ -2,18 +2,28 @@ import 'package:aegis_vpn/core/theme/app_theme.dart';
 import 'package:aegis_vpn/features/auth/presentation/login_screen.dart';
 import 'package:aegis_vpn/features/auth/presentation/register_screen.dart';
 import 'package:aegis_vpn/features/devices/domain/device.dart';
+import 'package:aegis_vpn/features/history/domain/vpn_session_record.dart';
+import 'package:aegis_vpn/features/history/presentation/history_screen.dart';
+import 'package:aegis_vpn/features/history/presentation/session_recorder.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/devices/presentation/device_config_screen.dart';
 import 'package:aegis_vpn/features/home/presentation/connect_screen.dart';
-import 'package:aegis_vpn/features/killswitch/presentation/kill_switch_screen.dart';
+import 'package:aegis_vpn/features/killswitch/presentation/protection_screen.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
 import 'package:aegis_vpn/features/nodes/presentation/locations_screen.dart';
 import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
+import 'package:aegis_vpn/features/nodes/presentation/selected_node.dart';
+import 'package:aegis_vpn/features/splittunnel/domain/installed_app.dart';
+import 'package:aegis_vpn/features/splittunnel/presentation/split_tunnel_controller.dart';
+import 'package:aegis_vpn/features/splittunnel/presentation/split_tunnel_screen.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
 import 'package:aegis_vpn/features/tunnel/presentation/tunnel_metrics.dart';
 import 'package:aegis_vpn/features/tunnel/presentation/widgets/connect_orb.dart';
+import 'package:aegis_vpn/features/whoami/domain/exit_check.dart';
+import 'package:aegis_vpn/features/whoami/presentation/exit_check_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/test_harness.dart';
@@ -73,7 +83,37 @@ void main() {
     ),
   ];
 
-  final withNodes = [vpnNodesProvider.overrideWith((ref) async => nodes)];
+  /// What `/whoami` says before anything is connected: the device's own address,
+  /// recognised as belonging to no node.
+  final unprotected = ExitCheck(
+    ip: '49.36.180.22',
+    viaTunnel: false,
+    node: null,
+    checkedAt: DateTime.utc(2026, 9, 15, 10),
+  );
+
+  /// The same call once traffic is going through Frankfurt.
+  final viaFrankfurt = ExitCheck(
+    ip: '3.71.204.118',
+    viaTunnel: true,
+    node: const ExitNode(id: 'n-fra', name: 'Frankfurt #1', region: 'de-frankfurt'),
+    checkedAt: DateTime.utc(2026, 9, 15, 10),
+  );
+
+  /// What every screen test needs before it can draw: a fleet, a place to rank
+  /// it from, and an answer from `/whoami`.
+  List<Override> fleet({ExitCheck? seenAs}) => [
+        vpnNodesProvider.overrideWith((ref) async => nodes),
+        // Automatic ranks by the device's time zone, so a test that did not pin
+        // one would pick a different country on a machine set to UTC than on one
+        // in India. Placed in India, where the live fleet's users are.
+        deviceUtcOffsetProvider.overrideWithValue(
+          const Duration(hours: 5, minutes: 30),
+        ),
+        // There is no network here: without this the card would render its
+        // "could not check" state on every screen that carries it.
+        exitCheckProvider.overrideWith((ref) async => seenAs ?? unprotected),
+      ];
 
   // A small phone and a large one. An overflow on either fails the test, because
   // the test binding surfaces render errors as exceptions.
@@ -102,7 +142,7 @@ void main() {
         await pumpScreen(
           tester,
           const ConnectScreen(),
-          overrides: withNodes,
+          overrides: fleet(),
           surfaceSize: entry.value,
         );
         // Settling at all is the assertion that matters most here: the orb's
@@ -128,10 +168,15 @@ void main() {
         // No kill switch reported by the platform, so no badge claiming one.
         expect(find.text('Auto-reconnect'), findsNothing);
 
-        // Automatic with no stored choice, resolved to the emptiest node so the
-        // card names a country rather than just saying "Automatic".
-        expect(find.text('Germany'), findsOneWidget);
+        // Automatic with no stored choice, resolved to the node nearest the
+        // device rather than the emptiest one in the fleet. Frankfurt is far
+        // emptier than either Indian node and must still not win from here.
+        expect(find.text('India'), findsOneWidget);
         expect(find.text('AUTO'), findsOneWidget);
+
+        // The one claim on this screen the device does not make about itself.
+        expect(find.text('You appear as 49.36.180.22'), findsOneWidget);
+        expect(find.textContaining('Your real address'), findsOneWidget);
 
         expect(tester.takeException(), isNull);
       });
@@ -141,12 +186,12 @@ void main() {
         await pumpScreen(
           tester,
           const LocationsScreen(),
-          overrides: withNodes,
+          overrides: fleet(),
           surfaceSize: entry.value,
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Fastest available'), findsOneWidget);
+        expect(find.text('Closest to you'), findsOneWidget);
         // Alphabetical by country, and the two Indian nodes collapse to one row.
         expect(find.text('Germany'), findsOneWidget);
         expect(find.text('India'), findsOneWidget);
@@ -172,7 +217,7 @@ void main() {
             tester,
             const ConnectScreen(),
             overrides: [
-              ...withNodes,
+              ...fleet(),
               tunnelStatusStreamProvider.overrideWith(
                 (ref) => Stream.value(scenario.status),
               ),
@@ -195,17 +240,38 @@ void main() {
         });
       }
 
-      testWidgets('kill switch screen says what it does not cover', (tester) async {
+      testWidgets('protection screen says what each part does not cover', (tester) async {
         await pumpScreen(
           tester,
-          const KillSwitchScreen(),
+          const ProtectionScreen(),
           surfaceSize: entry.value,
         );
         await tester.pumpAndSettle();
 
         expect(find.text('Rebuild the tunnel if it drops'), findsOneWidget);
-        // Defaults to off, and the stubbed platform reports it disarmed.
-        expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+        // Auto-connect sits above it, answering the other half of the question:
+        // one brings a tunnel back, the other brings one up that was never there.
+        expect(find.text('Connect on untrusted Wi-Fi'), findsOneWidget);
+
+        // Both default to off, and the stubbed platform reports both disarmed.
+        final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
+        expect(switches, hasLength(2));
+        expect(switches.map((toggle) => toggle.value), everyElement(isFalse));
+
+        // Auto-connect's own limit, stated on the card rather than discovered.
+        expect(
+          find.textContaining('Android will not let an app start a VPN'),
+          findsOneWidget,
+        );
+
+        // The pull-down tile is offered here, since a tile nobody has added is a
+        // tile nobody knows about.
+        await tester.scrollUntilVisible(
+          find.text('Add the tile'),
+          300,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.text('Connect from the pull-down shade'), findsOneWidget);
 
         // The honesty this screen exists for: an app cannot block traffic on
         // Android, so the page must say who can. Below the fold on a small
@@ -227,6 +293,47 @@ void main() {
           findsOneWidget,
         );
 
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('split tunnel screen lists apps to exclude', (tester) async {
+        await pumpScreen(
+          tester,
+          const SplitTunnelScreen(),
+          overrides: [
+            installedAppsProvider.overrideWith((ref) async => _apps),
+          ],
+          surfaceSize: entry.value,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Example Bank'), findsOneWidget);
+        expect(find.text('Chat'), findsOneWidget);
+        // Nothing ticked yet, so the screen says what the default actually is
+        // rather than leaving "split tunnelling" to be guessed at.
+        expect(find.textContaining('Every app uses the tunnel'), findsOneWidget);
+        // A system app is labelled, not hidden — a carrier's own app is a
+        // plausible thing to exclude.
+        expect(find.textContaining('· system'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('history screen totals the sessions it lists', (tester) async {
+        await pumpScreen(
+          tester,
+          const HistoryScreen(),
+          overrides: [
+            sessionHistoryProvider.overrideWith((ref) async => _sessions),
+          ],
+          surfaceSize: entry.value,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Frankfurt #1'), findsOneWidget);
+        expect(find.text('Mumbai #1'), findsOneWidget);
+        expect(find.text('2'), findsOneWidget); // sessions
+        // The promise that makes a usage log acceptable in a VPN app.
+        expect(find.textContaining('Nothing here is sent to the server'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
 
@@ -278,7 +385,7 @@ void main() {
       tester,
       const ConnectScreen(),
       overrides: [
-        vpnNodesProvider.overrideWith((ref) async => nodes),
+        ...fleet(),
         tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_noHandshakeYet)),
         // The uptime notifier times from wall clock, not from its own ticks, so
         // that it keeps counting while the app is backgrounded and its timer is
@@ -300,6 +407,47 @@ void main() {
     // The session clock still runs, because the interface really is up.
     expect(find.text('00:30'), findsOneWidget);
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the exit check names the country the server saw us from',
+      (tester) async {
+    await pumpScreen(
+      tester,
+      const ConnectScreen(),
+      overrides: [
+        ...fleet(seenAs: viaFrankfurt),
+        tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
+      ],
+    );
+    await tester.pump();
+
+    expect(find.textContaining('You appear in Germany'), findsOneWidget);
+    expect(find.text('3.71.204.118 · Frankfurt #1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a tunnel that is up but not carrying the traffic is called out',
+      (tester) async {
+    // The failure every other indicator on this screen would miss: the
+    // interface is up, the peer is answering, and the request still reached the
+    // API from the device's own address.
+    await pumpScreen(
+      tester,
+      const ConnectScreen(),
+      overrides: [
+        ...fleet(),
+        tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
+      ],
+    );
+    await tester.pump();
+
+    expect(find.text('Protected'), findsOneWidget);
+    expect(find.text('Your traffic is not exiting through Aegis'), findsOneWidget);
+    expect(
+      find.textContaining('not one of our servers'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -367,6 +515,18 @@ class _LiveState {
 /// Interface up, nothing ever received from the peer. The case a green badge
 /// would lie about: a blocked UDP port, a stale endpoint, or a peer revoked
 /// server-side all look exactly like this.
+/// Up, and the peer is answering — the state in which a non-fleet exit address
+/// means something is wrong rather than simply that nothing is connected.
+final _handshaking = TunnelStatus(
+  state: TunnelState.connected,
+  deviceId: 'd1',
+  stats: TunnelStats(
+    rxBytes: 4096,
+    txBytes: 4096,
+    lastHandshake: DateTime.now(),
+  ),
+);
+
 const _noHandshakeYet = TunnelStatus(
   state: TunnelState.connected,
   deviceId: 'd1',
@@ -424,5 +584,30 @@ final _liveStates = [
     status: TunnelStatus(state: TunnelState.disconnecting),
     headline: 'Disconnecting',
     detail: 'Tearing down',
+  ),
+];
+
+/// Two apps a picker has to draw: one ordinary, one shipped with the device.
+const _apps = [
+  InstalledApp(package: 'com.bank.example', label: 'Example Bank', isSystem: false),
+  InstalledApp(package: 'com.android.chat', label: 'Chat', isSystem: true),
+];
+
+final _sessions = [
+  VpnSessionRecord(
+    startedAt: DateTime.utc(2026, 9, 15, 9),
+    endedAt: DateTime.utc(2026, 9, 15, 10),
+    rxBytes: 4 * 1024 * 1024,
+    txBytes: 512 * 1024,
+    nodeName: 'Frankfurt #1',
+    region: 'de-frankfurt',
+  ),
+  VpnSessionRecord(
+    startedAt: DateTime.utc(2026, 9, 14, 20),
+    endedAt: DateTime.utc(2026, 9, 14, 20, 30),
+    rxBytes: 1024,
+    txBytes: 1024,
+    nodeName: 'Mumbai #1',
+    region: 'in-mumbai',
   ),
 ];

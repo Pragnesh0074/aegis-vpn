@@ -16,6 +16,7 @@ import '../../tunnel/presentation/tunnel_metrics.dart';
 import '../../tunnel/presentation/vpn_session.dart';
 import '../../tunnel/presentation/widgets/connect_orb.dart';
 import '../../tunnel/presentation/widgets/throughput_panel.dart';
+import '../../whoami/presentation/widgets/exit_check_card.dart';
 
 /// The landing screen: one button, what it is doing, and where it goes.
 ///
@@ -92,6 +93,12 @@ class ConnectScreen extends ConsumerWidget {
                         ],
                         SizedBox(height: 24.h),
                         ThroughputPanel(isUp: status.state.isUp),
+                        SizedBox(height: 12.h),
+                        // Directly under the counters, which are the claim this
+                        // verifies: bytes moving through an interface is not the
+                        // same as traffic leaving the country the app says it
+                        // does.
+                        const ExitCheckCard(),
                         SizedBox(height: 12.h),
                         LocationSummaryCard(
                           onTap: () => context.go(AppRoutes.locations),
@@ -423,16 +430,24 @@ class _Failure extends StatelessWidget {
   /// rest fall through to the app-wide translation.
   static String _message(Object error) {
     if (error is TunnelException) {
-      return error.isPermissionDenied
-          ? 'Android needs your permission to create a VPN connection. '
-              'Tap connect again and allow it.'
-          : error.message;
+      if (error.isPermissionDenied) {
+        return 'Android needs your permission to create a VPN connection. '
+            'Tap connect again and allow it.';
+      }
+      // The prompt never appeared, so "tap again and allow it" would send
+      // someone hunting for a dialog that will not come. The platform message
+      // names the actual blocker.
+      return error.message;
     }
-    // Provisioning needs a free device slot. There is no add-device screen to
-    // send people to any more, so this has to name where the slots are managed.
+    // A 409 here means the account still holds a peer that could not be
+    // released — connecting revokes the previous one first, and a node that was
+    // unreachable at that moment leaves the old row in place and the cap full.
+    // It used to send people to Account > Devices; there is no such screen now,
+    // and pointing at one would be worse than admitting there is nothing to do
+    // but retry.
     if (error is ApiException && error.isConflict) {
-      return 'You have reached your device limit. Free a slot under '
-          'Account, then Devices.';
+      return 'An earlier connection on your account could not be released, so a '
+          'new one cannot be set up. Try again in a moment.';
     }
     return describeError(error);
   }

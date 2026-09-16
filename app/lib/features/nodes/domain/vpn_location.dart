@@ -24,6 +24,14 @@ class VpnLocation {
   /// True when any node here can still be issued a peer.
   bool get available => nodes.any((node) => node.available);
 
+  /// True when at least one node here is answering the API.
+  ///
+  /// The difference from [available] is what the row says when it cannot be
+  /// picked: a country that is full will free up, and one that is offline is
+  /// broken. Telling someone "Full" about a node that has fallen over sends them
+  /// to wait for something that is not going to happen.
+  bool get healthy => nodes.any((node) => node.healthy);
+
   /// The emptiest node with capacity, or the emptiest one if all are full.
   /// This is what selecting the row actually picks.
   VpnNode get preferred => nodes.firstWhere(

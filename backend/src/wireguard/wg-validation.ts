@@ -79,3 +79,28 @@ export function assertIpInSubnet(ip: string, cidr: string): string {
   }
   return ip;
 }
+
+/**
+ * Whether [ip] falls anywhere inside [cidr], network and broadcast addresses
+ * included.
+ *
+ * Deliberately wider than `assertIpInSubnet`, which answers a different question:
+ * that one guards an address about to be *assigned* to a peer and so excludes the
+ * three addresses a client may never hold. This one only asks whether an address
+ * belongs to a network — `.1`, the node's own wg0 address, is a legitimate match
+ * and has to count.
+ *
+ * Returns false rather than throwing on anything unparseable. Its caller is the
+ * whoami check, whose input is a remote address the server did not choose, and a
+ * malformed one means "not in this subnet", not "fail the request".
+ */
+export function subnetContains(ip: string, cidr: string): boolean {
+  try {
+    const value = ipToInt(ip);
+    const { networkInt, prefix } = parseSubnet(cidr);
+    const mask = (0xffffffff << (32 - prefix)) >>> 0;
+    return ((value & mask) >>> 0) === networkInt;
+  } catch {
+    return false;
+  }
+}

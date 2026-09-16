@@ -5,6 +5,7 @@ import {
   intToIp,
   ipToInt,
   parseSubnet,
+  subnetContains,
 } from './wg-validation';
 
 const key = () => randomBytes(32).toString('base64');
@@ -104,5 +105,26 @@ describe('assertValidPublicKey', () => {
 
   it('rejects a key with a newline appended', () => {
     expect(() => assertValidPublicKey(`${key()}\n`)).toThrow();
+  });
+});
+
+describe('subnetContains', () => {
+  it('matches every address in the network, edges included', () => {
+    // Wider than assertIpInSubnet on purpose: .1 is the node's own wg0 address
+    // and is exactly what the whoami check sees from a client on that node.
+    expect(subnetContains('10.8.0.0', '10.8.0.0/24')).toBe(true);
+    expect(subnetContains('10.8.0.1', '10.8.0.0/24')).toBe(true);
+    expect(subnetContains('10.8.0.255', '10.8.0.0/24')).toBe(true);
+  });
+
+  it('rejects an address in a neighbouring network', () => {
+    expect(subnetContains('10.9.0.2', '10.8.0.0/24')).toBe(false);
+  });
+
+  it('returns false rather than throwing on anything unparseable', () => {
+    // Its input is a remote address the server did not choose.
+    expect(subnetContains('not-an-ip', '10.8.0.0/24')).toBe(false);
+    expect(subnetContains('::1', '10.8.0.0/24')).toBe(false);
+    expect(subnetContains('10.8.0.2', 'nonsense')).toBe(false);
   });
 });

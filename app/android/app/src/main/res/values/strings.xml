@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Quick Settings tile. Short, because the shade gives a tile about eight
+         characters before it truncates. -->
+    <string name="tile_label">Aegis</string>
+    <string name="tile_on">Connected</string>
+    <string name="tile_off">Disconnected</string>
+    <string name="tile_working">Working…</string>
+</resources>

@@ -4,7 +4,8 @@
 
 | Item | Value |
 |---|---|
-| **Server IP** | `13.201.194.65` |
+| **Server IP** | `3.111.32.212` (public DNS `ec2-3-111-32-212.ap-south-1.compute.amazonaws.com`) |
+| **⚠ IP is not static** | No Elastic IP — every instance stop/start changes it. See "When the IP changes". |
 | **Instance** | EC2, `ap-south-1` (Mumbai) |
 | **SSH Key** | `free-vpn-key.pem` |
 | **Security Group** | `vpn-server-sg` |
@@ -20,7 +21,7 @@
 
 ```bash
 cd /Users/hyperlink/StudioProjects/aegis-vpn
-ssh -i "free-vpn-key.pem" ubuntu@13.201.194.65
+ssh -i "free-vpn-key.pem" ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com
 ```
 
 ---
@@ -93,6 +94,84 @@ sudo systemctl status wg-quick@wg0
 
 ---
 
+## DNS and Ad Blocking
+
+Peers are handed one resolver, `10.8.0.1`, and two processes sit behind it:
+
+```
+peer ──▶ blocky  10.8.0.1:53 ──▶ unbound  127.0.0.1:5335 ──▶ root servers
+```
+
+Blocky answers `0.0.0.0` for ad and tracker domains (~79k, refreshed daily) and
+forwards the rest to Unbound, which does the recursion. **If Blocky is down there
+is no DNS in the tunnel** — connected users see everything time out, even though
+the tunnel itself is fine.
+
+```bash
+# Is the resolver up?
+sudo systemctl status blocky
+sudo journalctl -u blocky -n 50 --no-pager
+
+# Test each half separately — this is the first thing to do for any DNS report
+dig @10.8.0.1 example.com +short          # blocky -> unbound -> internet
+dig @127.0.0.1 -p 5335 example.com +short # unbound alone; isolates which one broke
+
+# Blocking working?
+dig @10.8.0.1 doubleclick.net +short      # expect 0.0.0.0
+```
+
+### Unblocking a domain
+
+Blocklists break payment gateways, delivery tracking and OAuth logins regularly.
+When a user reports a broken site, find the blocked lookup, then allowlist it:
+
+```bash
+sudo nano /etc/blocky/allowlist.txt   # one domain per line; *.wildcard and /regex/ work
+sudo systemctl reload blocky          # re-reads lists, no dropped queries
+```
+
+`allowlist.txt` is the one file here that `provision.sh` will **not** overwrite.
+`config.yml` is regenerated on every run, so put nothing in it you want to keep.
+
+### Emergency: turn blocking off
+
+If a bad list update breaks things widely, this restores plain resolution in
+about ten seconds without uninstalling anything — Unbound moves back onto the
+tunnel address and Blocky steps aside:
+
+```bash
+sudo systemctl stop blocky
+sudo sed -i 's/^    interface: 127.0.0.1@5335/    interface: 10.8.0.1\n    ip-freebind: yes/' \
+  /etc/unbound/unbound.conf.d/aegis-vpn.conf
+sudo systemctl restart unbound
+dig @10.8.0.1 doubleclick.net +short   # now a real address: blocking is off
+```
+
+Re-run `sudo bash /opt/aegis-vpn/ops/provision.sh` to put the chain back.
+
+On an exit node substitute its own tunnel address for `10.8.0.1` — Frankfurt
+is `10.9.0.1`. It is the `dns` column of that node's row, and the address the
+peers on it were issued.
+
+### Upgrading Blocky
+
+The version is pinned in `provision.sh` so the whole fleet runs one resolver.
+Bump `BLOCKY_VERSION` there, or test a single node first:
+
+```bash
+sudo BLOCKY_VERSION=v0.36.0 bash /opt/aegis-vpn/ops/provision.sh
+```
+
+### What it does not block
+
+Ads served from the same hostname as the content — YouTube pre-rolls, Instagram
+and Facebook sponsored posts, TikTok, Spotify audio. No DNS-based blocker can
+touch these, including every commercial VPN that advertises ad blocking. What
+does get blocked is third-party web ads and in-app ad SDKs, which is most of
+what users see. Metrics are on `127.0.0.1:4000/metrics` (loopback only).
+
+---
+
 ## Deploy Code Updates
 
 From your Mac:
@@ -104,13 +183,13 @@ cd /Users/hyperlink/StudioProjects/aegis-vpn
 rsync -avz --exclude 'node_modules' --exclude '.env' --exclude 'dist' --exclude '.git' \
   -e "ssh -i free-vpn-key.pem" \
   /Users/hyperlink/StudioProjects/aegis-vpn/ \
-  ubuntu@13.201.194.65:/home/ubuntu/aegis-vpn-update/
+  ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com:/home/ubuntu/aegis-vpn-update/
 ```
 
 Then SSH in and deploy:
 
 ```bash
-ssh -i "free-vpn-key.pem" ubuntu@13.201.194.65
+ssh -i "free-vpn-key.pem" ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com
 
 # Replace code
 sudo systemctl stop aegis-api
@@ -168,7 +247,59 @@ TOKEN=<paste-accessToken-here>
 curl -s $API/nodes -H "authorization: Bearer $TOKEN"
 curl -s $API/users/me -H "authorization: Bearer $TOKEN"
 curl -s $API/devices -H "authorization: Bearer $TOKEN"
+
+# Where the API sees this request coming from, and whether that address belongs
+# to the fleet. Unauthenticated — it only ever reports the caller's own address.
+# Run it from a tunnelled machine and it should name the node you exited through.
+curl -s $API/whoami
 ```
+
+### Checking that peers are being seen
+
+`Device.lastSeenAt` is written by a sweep that reads each active node's peers
+every `DEVICE_LAST_SEEN_POLL_SECONDS` (default 60; 0 disables it) and moves the
+matching rows forward from their latest handshake. It reads through the same
+runner registry that issues peers, so **`WG_NODE_ID` must be set** once more than
+one node is active — without it the sweep cannot tell which interface this host
+owns and logs a warning per node instead of writing anything.
+
+```bash
+# What the sweep is doing, from the API's journal
+journalctl -u aegis-api -f | grep -i 'handshake sweep'
+
+# The raw truth it reads, on the node itself
+sudo wg show wg0 latest-handshakes
+```
+
+### When a node stops answering
+
+The same sweep is the fleet's health probe: reaching a node to read its peers is
+what answers "is it there?". Two consecutive failures take it out of selection —
+it stops being offered to clients, `GET /nodes` reports `healthy: false`, and the
+app shows that country as **Offline** rather than Full. One success puts it back.
+
+```bash
+# Nodes going in and out of selection
+journalctl -u aegis-api -f | grep -iE 'unreachable|answering again'
+
+# What clients are being offered right now
+curl -s $API/nodes -H "authorization: Bearer $TOKEN"
+```
+
+Two things worth knowing before acting on it:
+
+- **It only sees the control plane.** A node whose agent answers while its
+  traffic goes nowhere — a lost NAT rule, the AWS source/destination check
+  re-enabled — reads as perfectly healthy here. `GET /whoami` from a tunnelled
+  client is what catches that.
+- **`active` is still yours.** Health never writes to the database; it lives in
+  the API process and is re-learned within a sweep of a restart. Taking a node
+  out of the fleet deliberately is still `active = false`.
+
+Clients already on a node that goes unhealthy are moved on their next connect —
+but only on **Automatic**. Someone who picked that country keeps it, and sees the
+connection fail, because silently moving a person out of the country they chose
+is the worse outcome.
 
 ---
 
@@ -202,7 +333,7 @@ MTU = 1420
 
 [Peer]
 PublicKey = $SERVER_PUB
-Endpoint = 13.201.194.65:51820
+Endpoint = 3.111.32.212:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25"
 
@@ -212,6 +343,39 @@ echo "$CONFIG" | qrencode -t ansiutf8
 # Or save as PNG
 echo "$CONFIG" | qrencode -t PNG -o ~/vpn-qr.png -s 10
 ```
+
+---
+
+## When the IP changes
+
+The instance has **no Elastic IP**, so every stop/start assigns a new public
+address. It has already changed four times (`13.201.194.65` → `13.126.153.247`
+→ `13.204.63.43` → `3.111.32.212`). Each change silently breaks four things, in
+rising order of how long they take to notice:
+
+1. **This document** and the SSH commands in it.
+2. **The Flutter client's default API origin** — `_defaultBaseUrl` in
+   `app/lib/core/config/app_config.dart`. The app cannot reach the API at all.
+3. **The node's `endpoint` column in the database** (`nodes` table, Mumbai row
+   `501b27c5-59d2-48ac-a4d1-4e2af3a8a86d`). This is what `POST /devices` hands to
+   clients. Until it is updated, every *newly issued* peer config points at the
+   dead address.
+4. **Every peer config already issued.** Those `Endpoint =` lines were baked in
+   when the device was added and are cached on each phone. They cannot be
+   rewritten remotely — affected devices must be removed and re-added.
+
+Item 4 is the reason to fix this properly rather than repeat the checklist:
+
+```bash
+# Allocate once, associate with the instance — the address then survives stop/start.
+aws ec2 allocate-address --domain vpc --region ap-south-1
+aws ec2 associate-address --region ap-south-1 \
+  --instance-id <instance-id> --allocation-id <eipalloc-...>
+```
+
+An Elastic IP is free while it is associated with a running instance. A DNS name
+pointing at the node works too, and WireGuard re-resolves it on rehandshake — but
+only the Elastic IP also protects configs already on people's phones.
 
 ---
 

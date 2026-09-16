@@ -128,43 +128,122 @@ final class SelectedNodeProvider
 
 String _$selectedNodeHash() => r'2be4bf64d380a518efb4677a799bd94a4ca35854';
 
-/// What automatic would most likely give you: the emptiest node with capacity.
+/// The device's offset from UTC, which is all the location this app asks for.
 ///
-/// Only a prediction — the backend runs the same rule at issue time and its
-/// answer is the one that counts — but the locations screen has to label a row
-/// "Fastest" and an empty node is the honest guess.
+/// A provider rather than a direct `DateTime.now()` call so a test can place the
+/// device somewhere without moving the machine's clock. See [NodeRanking] for
+/// why a time zone is the signal being used.
 
-@ProviderFor(fastestNode)
-final fastestNodeProvider = FastestNodeProvider._();
+@ProviderFor(deviceUtcOffset)
+final deviceUtcOffsetProvider = DeviceUtcOffsetProvider._();
 
-/// What automatic would most likely give you: the emptiest node with capacity.
+/// The device's offset from UTC, which is all the location this app asks for.
 ///
-/// Only a prediction — the backend runs the same rule at issue time and its
-/// answer is the one that counts — but the locations screen has to label a row
-/// "Fastest" and an empty node is the honest guess.
+/// A provider rather than a direct `DateTime.now()` call so a test can place the
+/// device somewhere without moving the machine's clock. See [NodeRanking] for
+/// why a time zone is the signal being used.
 
-final class FastestNodeProvider
-    extends
-        $FunctionalProvider<AsyncValue<VpnNode?>, VpnNode?, FutureOr<VpnNode?>>
-    with $FutureModifier<VpnNode?>, $FutureProvider<VpnNode?> {
-  /// What automatic would most likely give you: the emptiest node with capacity.
+final class DeviceUtcOffsetProvider
+    extends $FunctionalProvider<Duration, Duration, Duration>
+    with $Provider<Duration> {
+  /// The device's offset from UTC, which is all the location this app asks for.
   ///
-  /// Only a prediction — the backend runs the same rule at issue time and its
-  /// answer is the one that counts — but the locations screen has to label a row
-  /// "Fastest" and an empty node is the honest guess.
-  FastestNodeProvider._()
+  /// A provider rather than a direct `DateTime.now()` call so a test can place the
+  /// device somewhere without moving the machine's clock. See [NodeRanking] for
+  /// why a time zone is the signal being used.
+  DeviceUtcOffsetProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
-        name: r'fastestNodeProvider',
+        name: r'deviceUtcOffsetProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$deviceUtcOffsetHash();
+
+  @$internal
+  @override
+  $ProviderElement<Duration> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  Duration create(Ref ref) {
+    return deviceUtcOffset(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(Duration value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<Duration>(value),
+    );
+  }
+}
+
+String _$deviceUtcOffsetHash() => r'5c38aecaa8d81dc45615c2ab934120c654f45e5a';
+
+/// What automatic resolves to: the nearest node with capacity.
+///
+/// No longer a prediction of what the backend would do. The client picks, and
+/// sends that node id on `POST /devices` — see `VpnSession._ensureDevice`. The
+/// backend's `selectLeastLoaded()` remains the fallback for a request that names
+/// no node, which now happens only when there is nothing to rank by.
+///
+/// The client is the right place for this: it is the only party that knows where
+/// the device is, and it already had to compute this answer to put a country on
+/// the connect screen. Leaving the decision on the server meant the screen
+/// predicted one node while the server chose another, and the two disagreed
+/// exactly when the fleet was busy.
+
+@ProviderFor(nearestNode)
+final nearestNodeProvider = NearestNodeProvider._();
+
+/// What automatic resolves to: the nearest node with capacity.
+///
+/// No longer a prediction of what the backend would do. The client picks, and
+/// sends that node id on `POST /devices` — see `VpnSession._ensureDevice`. The
+/// backend's `selectLeastLoaded()` remains the fallback for a request that names
+/// no node, which now happens only when there is nothing to rank by.
+///
+/// The client is the right place for this: it is the only party that knows where
+/// the device is, and it already had to compute this answer to put a country on
+/// the connect screen. Leaving the decision on the server meant the screen
+/// predicted one node while the server chose another, and the two disagreed
+/// exactly when the fleet was busy.
+
+final class NearestNodeProvider
+    extends
+        $FunctionalProvider<AsyncValue<VpnNode?>, VpnNode?, FutureOr<VpnNode?>>
+    with $FutureModifier<VpnNode?>, $FutureProvider<VpnNode?> {
+  /// What automatic resolves to: the nearest node with capacity.
+  ///
+  /// No longer a prediction of what the backend would do. The client picks, and
+  /// sends that node id on `POST /devices` — see `VpnSession._ensureDevice`. The
+  /// backend's `selectLeastLoaded()` remains the fallback for a request that names
+  /// no node, which now happens only when there is nothing to rank by.
+  ///
+  /// The client is the right place for this: it is the only party that knows where
+  /// the device is, and it already had to compute this answer to put a country on
+  /// the connect screen. Leaving the decision on the server meant the screen
+  /// predicted one node while the server chose another, and the two disagreed
+  /// exactly when the fleet was busy.
+  NearestNodeProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'nearestNodeProvider',
         isAutoDispose: true,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
 
   @override
-  String debugGetCreateSourceHash() => _$fastestNodeHash();
+  String debugGetCreateSourceHash() => _$nearestNodeHash();
 
   @$internal
   @override
@@ -173,15 +252,15 @@ final class FastestNodeProvider
 
   @override
   FutureOr<VpnNode?> create(Ref ref) {
-    return fastestNode(ref);
+    return nearestNode(ref);
   }
 }
 
-String _$fastestNodeHash() => r'198d5dacd68c84ccb16f2d5a166b4a889907d727';
+String _$nearestNodeHash() => r'3bd930d3a6ead7bac89f958926da62f0d41e4aba';
 
 /// The location line the connect screen headlines, resolved for either mode.
 ///
-/// On automatic this reports the node automatic would pick, flagged as such, so
+/// On automatic this reports the node automatic will pick, flagged as such, so
 /// the screen never has to show a bare "Automatic" with no country attached.
 
 @ProviderFor(locationChoice)
@@ -189,7 +268,7 @@ final locationChoiceProvider = LocationChoiceProvider._();
 
 /// The location line the connect screen headlines, resolved for either mode.
 ///
-/// On automatic this reports the node automatic would pick, flagged as such, so
+/// On automatic this reports the node automatic will pick, flagged as such, so
 /// the screen never has to show a bare "Automatic" with no country attached.
 
 final class LocationChoiceProvider
@@ -202,7 +281,7 @@ final class LocationChoiceProvider
     with $FutureModifier<LocationChoice>, $FutureProvider<LocationChoice> {
   /// The location line the connect screen headlines, resolved for either mode.
   ///
-  /// On automatic this reports the node automatic would pick, flagged as such, so
+  /// On automatic this reports the node automatic will pick, flagged as such, so
   /// the screen never has to show a bare "Automatic" with no country attached.
   LocationChoiceProvider._()
     : super(
@@ -230,4 +309,4 @@ final class LocationChoiceProvider
   }
 }
 
-String _$locationChoiceHash() => r'554b6d902fff7208b6f4ca00b4bcbd239760b317';
+String _$locationChoiceHash() => r'82c030e3ee554c3f5b4ca1fadce47fe493345bdb';

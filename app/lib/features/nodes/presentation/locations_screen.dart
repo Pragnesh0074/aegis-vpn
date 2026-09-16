@@ -9,6 +9,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../tunnel/presentation/vpn_session.dart';
+import '../domain/node_ranking.dart';
 import 'nodes_providers.dart';
 import 'selected_node.dart';
 import 'widgets/location_tile.dart';
@@ -68,6 +69,8 @@ class LocationsScreen extends ConsumerWidget {
                   selected: selectedId == null,
                   onTap: busy ? null : () => _select(context, ref, null),
                 ),
+                SizedBox(height: 8.h),
+                const _AutomaticCaption(),
                 SizedBox(height: 18.h),
                 Padding(
                   padding: EdgeInsets.only(left: 4.w, bottom: 10.h),
@@ -99,9 +102,13 @@ class LocationsScreen extends ConsumerWidget {
   }
 }
 
-/// Let the backend choose. Its rule is the least-loaded node with capacity, so
-/// this row shows what that would currently resolve to rather than leaving the
-/// user to guess.
+/// Let the app choose. The rule is the nearest node with capacity, estimated
+/// from the device's time zone and tie-broken by load, so this row names the
+/// node it currently resolves to rather than leaving the user to guess.
+///
+/// It reads "Closest", not "Fastest". Nothing here times anything — see
+/// [NodeRanking] for why a client cannot — and a row promising speed while
+/// ranking on geography would be the same lie the old copy told.
 class _AutomaticTile extends ConsumerWidget {
   const _AutomaticTile({required this.selected, this.onTap});
 
@@ -110,7 +117,7 @@ class _AutomaticTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fastest = ref.watch(fastestNodeProvider).value;
+    final nearest = ref.watch(nearestNodeProvider).value;
 
     return Material(
       color: selected ? AppColors.accent.withValues(alpha: 0.08) : AppColors.surface,
@@ -146,7 +153,7 @@ class _AutomaticTile extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Fastest available',
+                      'Closest to you',
                       style: TextStyle(
                         fontSize: 14.5.sp,
                         fontWeight: FontWeight.w600,
@@ -155,10 +162,10 @@ class _AutomaticTile extends ConsumerWidget {
                     ),
                     SizedBox(height: 2.h),
                     Text(
-                      fastest == null
+                      nearest == null
                           ? 'Chosen by the server'
-                          : 'Currently ${fastest.name} · '
-                              '${Format.percent(fastest.load.clamp(0, 1))} load',
+                          : '${nearest.name} · '
+                              '${Format.percent(nearest.load.clamp(0, 1))} load',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 11.5.sp, color: AppColors.textMuted),
@@ -174,6 +181,28 @@ class _AutomaticTile extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Says out loud what "closest" is based on.
+///
+/// Without it the row reads as a measurement. A person choosing a country
+/// deserves to know the app worked this out from their clock and a table of
+/// country centroids, so that a wrong answer — a phone still on last week's time
+/// zone — is something they can recognise and override rather than trust.
+class _AutomaticCaption extends StatelessWidget {
+  const _AutomaticCaption();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 4.w),
+      child: Text(
+        'Estimated from your time zone, not measured. Pick a country below to '
+        'override it.',
+        style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, height: 1.35),
       ),
     );
   }

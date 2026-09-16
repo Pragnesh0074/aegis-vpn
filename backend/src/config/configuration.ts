@@ -53,6 +53,11 @@ export class AppConfig {
     return this.get('MAX_DEVICES_PER_USER');
   }
 
+  /** Seconds between handshake sweeps; 0 disables them. See `LastSeenService`. */
+  get lastSeenPollSeconds() {
+    return this.get('DEVICE_LAST_SEEN_POLL_SECONDS');
+  }
+
   get wgInterface() {
     return this.get('WG_INTERFACE');
   }

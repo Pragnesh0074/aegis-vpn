@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/node_selection_store.dart';
+import '../domain/node_ranking.dart';
 import '../domain/region_geo.dart';
 import '../domain/vpn_node.dart';
 import 'nodes_providers.dart';
@@ -49,25 +50,35 @@ Future<VpnNode?> selectedNode(Ref ref) async {
   return null;
 }
 
-/// What automatic would most likely give you: the emptiest node with capacity.
+/// The device's offset from UTC, which is all the location this app asks for.
 ///
-/// Only a prediction — the backend runs the same rule at issue time and its
-/// answer is the one that counts — but the locations screen has to label a row
-/// "Fastest" and an empty node is the honest guess.
+/// A provider rather than a direct `DateTime.now()` call so a test can place the
+/// device somewhere without moving the machine's clock. See [NodeRanking] for
+/// why a time zone is the signal being used.
+@Riverpod(keepAlive: true)
+Duration deviceUtcOffset(Ref ref) => DateTime.now().timeZoneOffset;
+
+/// What automatic resolves to: the nearest node with capacity.
+///
+/// No longer a prediction of what the backend would do. The client picks, and
+/// sends that node id on `POST /devices` — see `VpnSession._ensureDevice`. The
+/// backend's `selectLeastLoaded()` remains the fallback for a request that names
+/// no node, which now happens only when there is nothing to rank by.
+///
+/// The client is the right place for this: it is the only party that knows where
+/// the device is, and it already had to compute this answer to put a country on
+/// the connect screen. Leaving the decision on the server meant the screen
+/// predicted one node while the server chose another, and the two disagreed
+/// exactly when the fleet was busy.
 @riverpod
-Future<VpnNode?> fastestNode(Ref ref) async {
+Future<VpnNode?> nearestNode(Ref ref) async {
   final nodes = await ref.watch(vpnNodesProvider.future);
-  VpnNode? best;
-  for (final node in nodes) {
-    if (!node.available) continue;
-    if (best == null || node.load < best.load) best = node;
-  }
-  return best;
+  return NodeRanking.nearest(nodes, utcOffset: ref.watch(deviceUtcOffsetProvider));
 }
 
 /// The location line the connect screen headlines, resolved for either mode.
 ///
-/// On automatic this reports the node automatic would pick, flagged as such, so
+/// On automatic this reports the node automatic will pick, flagged as such, so
 /// the screen never has to show a bare "Automatic" with no country attached.
 @riverpod
 Future<LocationChoice> locationChoice(Ref ref) async {
@@ -76,7 +87,7 @@ Future<LocationChoice> locationChoice(Ref ref) async {
     return LocationChoice(node: chosen, isAutomatic: false);
   }
   return LocationChoice(
-    node: await ref.watch(fastestNodeProvider.future),
+    node: await ref.watch(nearestNodeProvider.future),
     isAutomatic: true,
   );
 }
