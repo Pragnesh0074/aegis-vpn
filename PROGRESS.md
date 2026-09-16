@@ -84,7 +84,7 @@ it with the app not running should launch Aegis and connect without a second tap
 |---|---|---|
 | id | `501b27c5-59d2-48ac-a4d1-4e2af3a8a86d` | `a0047e7d-2f56-4370-8776-61170ececf9c` |
 | region | `in-mumbai` | `de-frankfurt` |
-| endpoint | `3.111.32.212:51820` | `3.71.204.118:51820` |
+| endpoint | `3.110.119.193:51820` | `3.71.204.118:51820` |
 | subnet | `10.8.0.0/24` | `10.9.0.0/24` |
 | role | control (API + agent-less, programmed locally) | exit (`NODE_ROLE=exit`, agent on :8787) |
 | active | `true` | `true` |
@@ -267,7 +267,7 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 ## Known issues / follow-ups
 
-- **Mumbai hands out `1.1.1.1`, so it has no ad blocking yet.** Discovered 2026-09-16
+- ~~**Mumbai hands out `1.1.1.1`**~~ — **closed 2026-09-16.** `nodes.dns` is now `10.8.0.1` and a device issued through the live API comes back with `"dns": "10.8.0.1"`; queried from the tunnel address, `doubleclick.net` -> `0.0.0.0` and `example.com` resolves. New devices on Mumbai get ad blocking. Original finding:
   while deploying B1: Mumbai was built by hand, never by `provision.sh` (no `inet aegis`
   nftables table, plain iptables forwarding, Unbound was never installed). The resolver
   chain is now installed there via the new `ops/install-resolver.sh` and verified —

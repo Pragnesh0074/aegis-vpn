@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| **Server IP** | `3.111.32.212` (public DNS `ec2-3-111-32-212.ap-south-1.compute.amazonaws.com`) |
+| **Server IP** | `3.110.119.193` (changed 2026-09-16; was `3.111.32.212`) |
 | **⚠ IP is not static** | No Elastic IP — every instance stop/start changes it. See "When the IP changes". |
 | **Instance** | EC2, `ap-south-1` (Mumbai) |
 | **SSH Key** | `free-vpn-key.pem` |
@@ -21,7 +21,7 @@
 
 ```bash
 cd /Users/hyperlink/StudioProjects/aegis-vpn
-ssh -i "free-vpn-key.pem" ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com
+ssh -i "free-vpn-key.pem" ubuntu@3.110.119.193
 ```
 
 ---
@@ -204,13 +204,13 @@ cd /Users/hyperlink/StudioProjects/aegis-vpn
 rsync -avz --exclude 'node_modules' --exclude '.env' --exclude 'dist' --exclude '.git' \
   -e "ssh -i free-vpn-key.pem" \
   /Users/hyperlink/StudioProjects/aegis-vpn/ \
-  ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com:/home/ubuntu/aegis-vpn-update/
+  ubuntu@3.110.119.193:/home/ubuntu/aegis-vpn-update/
 ```
 
 Then SSH in and deploy:
 
 ```bash
-ssh -i "free-vpn-key.pem" ubuntu@ec2-3-111-32-212.ap-south-1.compute.amazonaws.com
+ssh -i "free-vpn-key.pem" ubuntu@3.110.119.193
 
 # Replace code
 sudo systemctl stop aegis-api
@@ -354,7 +354,7 @@ MTU = 1420
 
 [Peer]
 PublicKey = $SERVER_PUB
-Endpoint = 3.111.32.212:51820
+Endpoint = 3.110.119.193:51820
 AllowedIPs = 0.0.0.0/0, ::/0
 PersistentKeepalive = 25"
 
@@ -371,7 +371,7 @@ echo "$CONFIG" | qrencode -t PNG -o ~/vpn-qr.png -s 10
 
 The instance has **no Elastic IP**, so every stop/start assigns a new public
 address. It has already changed four times (`13.201.194.65` → `13.126.153.247`
-→ `13.204.63.43` → `3.111.32.212`). Each change silently breaks four things, in
+→ `13.204.63.43` → `3.111.32.212` → `3.110.119.193`). Each change silently breaks four things, in
 rising order of how long they take to notice:
 
 1. **This document** and the SSH commands in it.
