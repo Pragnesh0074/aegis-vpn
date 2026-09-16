@@ -49,7 +49,7 @@ history, quick-settings tile, node health + failover)
 | Q1 | Quick Settings tile | ✅ done |
 | N1 | Node health + failover | ✅ done |
 | B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — live on Mumbai |
-| B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ built — not yet deployed |
+| B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ done — live on Mumbai (app rebuild pending) |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
@@ -150,6 +150,8 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-16 | The unfiltered resolver's address must be **assigned to wg0**, not merely freebind-bound | `ip-freebind` lets unbound bind an address that does not exist yet, which is what gets it through boot — but it does not make the address *reachable*. A packet arriving for an address the kernel does not consider local is forwarded, not delivered, so the listener never sees it and unbound cannot even send replies (`udp_send_cb` errors in the journal). Caught in production: `dig @10.8.0.254` returned "no servers could be reached" while `ss` cheerfully showed unbound listening on it. Both scripts now `ip addr add` it and persist it in the `Address =` line of `wg0.conf` |
 
 | Date | Decision | Why |
 |------|----------|-----|
@@ -284,7 +286,13 @@ Append here as decisions are made, so a later session does not re-litigate them.
   `provision.sh`.** Verified identical at the time of writing, ignoring comments. Two
   copies because both scripts have to stay self-contained — the nodes are deployed by
   copying one file, not by `git pull`. Keep them in sync.
-- **B2 is built but not deployed.** Needs, in order: `prisma migrate deploy` against
+- ~~**B2 is built but not deployed**~~ — **deployed to Mumbai 2026-09-16.** Migration
+  applied, API swapped, `dnsUnfiltered` = `10.8.0.254`, verified by round-trip against
+  the live API: a new device gets `10.8.0.1`, `PATCH adBlockEnabled=false` then
+  `GET /devices/:id/config` returns `10.8.0.254`, and back again. Frankfurt is
+  untouched and its `dnsUnfiltered` is still null, so the switch reports itself
+  unsupported there, which is correct. **The app still needs rebuilding** for the
+  switch to appear. Original steps: `prisma migrate deploy` against
   Supabase, an API deploy, a re-run of `install-resolver.sh` on Mumbai to add the
   unfiltered listener on `10.8.0.254`, then `UPDATE nodes SET "dnsUnfiltered" =
   '10.8.0.254' WHERE region = 'in-mumbai'`. Until that column is set,

@@ -285,6 +285,29 @@ server:
     # Blocky's blockType is an address, and the canary only reads NXDOMAIN.
     local-zone: "use-application-dns.net." always_nxdomain
 UNBOUND
+# Assign the unfiltered address to the interface.
+#
+# ip-freebind lets unbound BIND an address that does not exist yet, which is what
+# gets it through boot. It does NOT make the address reachable: a packet arriving
+# for an address the kernel does not consider local is forwarded, not delivered, so
+# the listener never sees it and unbound cannot even send its replies. The address
+# has to actually be on wg0.
+if ip -4 addr show "$WG_IF" | grep -qw "${TUNNEL_UNFILTERED_IP}"; then
+  ok "${TUNNEL_UNFILTERED_IP} already on ${WG_IF}"
+else
+  ip addr add "${TUNNEL_UNFILTERED_IP}/32" dev "$WG_IF"
+  ok "${TUNNEL_UNFILTERED_IP}/32 added to ${WG_IF}"
+fi
+
+# And persist it, or the next `wg-quick down/up` drops it and every user who
+# switched ad blocking off silently loses DNS.
+WG_CONF="/etc/wireguard/${WG_IF}.conf"
+if [[ -f "$WG_CONF" ]] && ! grep -q "${TUNNEL_UNFILTERED_IP}/32" "$WG_CONF"; then
+  cp "$WG_CONF" "${WG_CONF}.bak-resolver"
+  sed -i "s|^Address = \(.*\)$|Address = \1, ${TUNNEL_UNFILTERED_IP}/32|" "$WG_CONF"
+  ok "persisted in ${WG_CONF} (backup: ${WG_CONF}.bak-resolver)"
+fi
+
 systemctl enable unbound >/dev/null 2>&1 || true
 systemctl restart unbound
 ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}, unfiltered on ${TUNNEL_UNFILTERED_IP}:53"
