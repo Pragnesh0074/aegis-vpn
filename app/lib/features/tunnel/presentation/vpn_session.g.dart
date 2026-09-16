@@ -152,7 +152,7 @@ final class VpnSessionProvider
   VpnSession create() => VpnSession();
 }
 
-String _$vpnSessionHash() => r'8ac2b5fd3046861204b4583b1faa19222bb977a3';
+String _$vpnSessionHash() => r'f080e19da8d4b0bbbb9f86acfdbd47e2f2099813';
 
 /// Connect, disconnect, and switch location — the whole of what the connect
 /// screen can do.

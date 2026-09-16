@@ -17,6 +17,17 @@ class ProfileRepository {
   Future<UserProfile> fetch() async {
     return UserProfile.fromJson(await _api.getJson(ApiEndpoints.me));
   }
+
+  /// `PATCH /users/me/settings`. Returns the whole profile back, so the caller
+  /// renders what the server stored rather than what it optimistically assumed —
+  /// which matters once a plan can refuse the change.
+  Future<UserProfile> setAdBlockEnabled(bool enabled) async {
+    final json = await _api.patchJson(
+      ApiEndpoints.meSettings,
+      body: {'adBlockEnabled': enabled},
+    );
+    return UserProfile.fromJson(json);
+  }
 }
 
 @Riverpod(keepAlive: true)

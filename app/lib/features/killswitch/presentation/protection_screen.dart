@@ -7,6 +7,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../autoconnect/presentation/widgets/auto_connect_card.dart';
 import '../../tunnel/data/tunnel_channel.dart';
+import 'ad_block_controller.dart';
 import 'kill_switch_controller.dart';
 
 /// Everything that decides when the tunnel is up without the user tapping the
@@ -31,6 +32,19 @@ class ProtectionScreen extends ConsumerWidget {
       await ref
           .read(killSwitchControllerProvider.notifier)
           .setEnabled(enabled: enabled);
+    } catch (error) {
+      if (context.mounted) showMessage(context, describeError(error), isError: true);
+    }
+  }
+
+  Future<void> _toggleAdBlock(BuildContext context, WidgetRef ref, bool enabled) async {
+    try {
+      await ref.read(adBlockControllerProvider.notifier).setEnabled(enabled: enabled);
+      if (!context.mounted) return;
+      showMessage(
+        context,
+        enabled ? 'Ad blocking on.' : 'Ad blocking off.',
+      );
     } catch (error) {
       if (context.mounted) showMessage(context, describeError(error), isError: true);
     }
@@ -64,6 +78,8 @@ class ProtectionScreen extends ConsumerWidget {
           children: [
             const AutoConnectCard(),
             Gap.md,
+            _AdBlockCard(onChanged: (value) => _toggleAdBlock(context, ref, value)),
+            Gap.md,
             _ReconnectCard(
               enabled: enabled,
               armed: armed,
@@ -77,6 +93,78 @@ class ProtectionScreen extends ConsumerWidget {
             const _WhatIsProtected(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// The ad-blocking switch.
+///
+/// Its own card rather than a row, because the honest description is the point.
+/// DNS filtering removes third-party ads and trackers — most of the web, and the
+/// ad SDKs inside apps — and cannot touch ads served from the same hostname as
+/// the content, which is how YouTube, Instagram and TikTok deliver theirs. A
+/// switch labelled "block ads" with nothing else said would be read as a promise
+/// this cannot keep, and the one-star review writes itself.
+///
+/// Draws from the server, because that is where the decision lives: the node
+/// hands each device either its filtering resolver or its plain one.
+class _AdBlockCard extends ConsumerWidget {
+  const _AdBlockCard({required this.onChanged});
+
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final setting = ref.watch(adBlockControllerProvider);
+    final enabled = setting.value ?? false;
+
+    return Container(
+      padding: EdgeInsets.all(16.r),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Block ads and trackers',
+                  style: TextStyle(
+                    fontSize: 14.5.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textHigh,
+                  ),
+                ),
+              ),
+              Switch(
+                value: enabled,
+                // Nothing to toggle until the profile has loaded; letting it move
+                // early would fire a write against a value nobody has read yet.
+                onChanged: setting.isLoading ? null : onChanged,
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            'Ad and tracker domains are refused by the resolver on the server, so '
+            'they never load — in the browser and inside apps alike. Changing this '
+            'reconnects the tunnel.',
+            style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+          ),
+          if (enabled) ...[
+            SizedBox(height: 12.h),
+            const _Warning(
+              text: 'Ads inside YouTube, Instagram and TikTok still appear. They '
+                  'come from the same address as the video or post, so blocking '
+                  'them would block the content too.',
+            ),
+          ],
+        ],
       ),
     );
   }

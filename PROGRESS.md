@@ -48,7 +48,8 @@ history, quick-settings tile, node health + failover)
 | H1 | Session history (on-device) | ✅ done |
 | Q1 | Quick Settings tile | ✅ done |
 | N1 | Node health + failover | ✅ done |
-| B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — not yet deployed |
+| B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — live on Mumbai |
+| B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ built — not yet deployed |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
 
@@ -283,7 +284,16 @@ Append here as decisions are made, so a later session does not re-litigate them.
   `provision.sh`.** Verified identical at the time of writing, ignoring comments. Two
   copies because both scripts have to stay self-contained — the nodes are deployed by
   copying one file, not by `git pull`. Keep them in sync.
-- **Ad blocking is fleet-wide and always on.** B1 puts Blocky on the tunnel address in
+- **B2 is built but not deployed.** Needs, in order: `prisma migrate deploy` against
+  Supabase, an API deploy, a re-run of `install-resolver.sh` on Mumbai to add the
+  unfiltered listener on `10.8.0.254`, then `UPDATE nodes SET "dnsUnfiltered" =
+  '10.8.0.254' WHERE region = 'in-mumbai'`. Until that column is set,
+  `canToggleAdBlocking` is false and the switch correctly reports itself unsupported.
+- **The switch is honest only as far as the resolver is.** A user with Android Private
+  DNS set to a provider hostname sees "Block ads and trackers: on" and gets ads,
+  because their lookups never reach the node. The nftables fix is still not done, and
+  it matters more now that the UI makes a promise.
+- ~~**Ad blocking is fleet-wide and always on.**~~ — closed by B2. Original note: B1 puts Blocky on the tunnel address in
   front of Unbound; there is no per-user switch yet. `nodes.dns` is unchanged, so no
   backend or app change was needed — but it also means a user cannot opt out. The toggle
   wants a second resolver address per node (`nodes.dnsBlocking`) plus `Device.adBlock`,

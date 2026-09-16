@@ -182,6 +182,12 @@ class _RecordingDevices implements DevicesRepository {
 
   @override
   Future<List<Device>> list() async => List.unmodifiable(live);
+  // The resolver never moves in these tests, so re-reading a config is a fetch the
+  // production code may make but nothing here asserts on.
+  @override
+  Future<DeviceConfig> fetchConfig(String deviceId) async {
+    throw UnimplementedError('fetchConfig is not exercised by this test');
+  }
 
   @override
   Future<DeviceConfig> create({

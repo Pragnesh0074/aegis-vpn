@@ -252,11 +252,20 @@ void main() {
         // Auto-connect sits above it, answering the other half of the question:
         // one brings a tunnel back, the other brings one up that was never there.
         expect(find.text('Connect on untrusted Wi-Fi'), findsOneWidget);
+        expect(find.text('Block ads and trackers'), findsOneWidget);
 
-        // Both default to off, and the stubbed platform reports both disarmed.
+        // All three default to off, and the stubbed platform reports them disarmed.
+        // Ad blocking's switch is additionally *disabled* here: its value comes from
+        // `/users/me`, which this harness does not answer, and a switch that moves
+        // before the profile has loaded would write a preference nobody has read.
         final switches = tester.widgetList<Switch>(find.byType(Switch)).toList();
-        expect(switches, hasLength(2));
+        expect(switches, hasLength(3));
         expect(switches.map((toggle) => toggle.value), everyElement(isFalse));
+        expect(
+          switches.where((toggle) => toggle.onChanged == null),
+          hasLength(1),
+          reason: 'the ad-blocking switch stays inert until the profile resolves',
+        );
 
         // Auto-connect's own limit, stated on the card rather than discovered.
         expect(

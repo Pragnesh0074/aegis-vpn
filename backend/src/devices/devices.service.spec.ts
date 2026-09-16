@@ -43,6 +43,7 @@ interface HarnessOptions {
   onCreate: (data: Record<string, unknown>, attempt: number) => Device;
   taken?: string[];
   hasCapacity?: boolean;
+  adBlockEnabled?: boolean;
 }
 
 function harness(options: HarnessOptions) {
@@ -79,6 +80,7 @@ function harness(options: HarnessOptions) {
 
   const users = {
     hasDeviceCapacity: async () => options.hasCapacity ?? true,
+    adBlockSubject: async () => ({ adBlockEnabled: options.adBlockEnabled ?? true }),
   } as unknown as UsersService;
 
   const nodes = {

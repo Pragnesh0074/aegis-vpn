@@ -8,6 +8,7 @@ import '../../devices/data/device_key_store.dart';
 import '../../devices/data/devices_repository.dart';
 import '../../devices/data/wireguard_keygen.dart';
 import '../../devices/domain/device.dart';
+import '../../devices/domain/device_config.dart';
 import '../../devices/presentation/devices_providers.dart';
 import '../../nodes/presentation/nodes_providers.dart';
 import '../../nodes/presentation/selected_node.dart';
@@ -123,6 +124,49 @@ class VpnSession extends _$VpnSession {
     final current = await ref.read(selectedNodeIdProvider.future);
     await ref.read(selectedNodeIdProvider.notifier).select(nodeId);
     if (current == nodeId) return true;
+
+    final status = ref.read(tunnelStatusStreamProvider).value;
+    if (status == null || !status.state.isUp) return true;
+
+    if (!await disconnect()) return false;
+    return connect();
+  }
+
+  /// Re-reads this phone's config from the server and rebuilds the tunnel if the
+  /// resolver moved.
+  ///
+  /// The resolver lives in the WireGuard `[Interface]`, which is fixed when the
+  /// tunnel is built, so changing it server-side reaches nobody on its own. The
+  /// cached config has to be replaced and the interface rebuilt — the same shape
+  /// as [selectLocation], and for the same reason.
+  ///
+  /// Returns false only when the change could not be applied. An unprovisioned
+  /// phone is true: there is no stale config to correct, and the next connect
+  /// will fetch the current one anyway.
+  Future<bool> refreshResolver() async {
+    final device = await ref.read(provisionedDeviceProvider.future);
+    if (device == null) return true;
+
+    final store = ref.read(tunnelConfigStoreProvider);
+    final cached = await store.read(device.id);
+
+    final DeviceConfig fresh;
+    try {
+      fresh = await ref.read(devicesRepositoryProvider).fetchConfig(device.id);
+    } catch (error, stack) {
+      // The preference is already saved server-side, so this is recoverable: the
+      // next connect re-reads the config. Failing loudly here would make a
+      // working toggle look broken.
+      logFailure('re-reading the device config', error, stack);
+      return false;
+    }
+
+    await store.save(fresh);
+
+    // Only disturb a live tunnel when the thing that requires a rebuild actually
+    // changed. A toggle that resolves to the same address — an unsupported node,
+    // or a plan that refused the change — should not drop the user's connection.
+    if (cached != null && cached.dns == fresh.dns) return true;
 
     final status = ref.read(tunnelStatusStreamProvider).value;
     if (status == null || !status.state.isUp) return true;

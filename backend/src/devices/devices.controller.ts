@@ -39,6 +39,19 @@ export class DevicesController {
     return this.devices.issue(user.userId, dto);
   }
 
+  /**
+   * Re-reads a device's config. The client caches it at issuance, so this is how a
+   * resolver change — the ad-blocking switch, or a node being re-addressed — reaches
+   * a device that already exists.
+   */
+  @Get(':id/config')
+  config(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DeviceConfigResponse> {
+    return this.devices.getConfig(user.userId, id);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(

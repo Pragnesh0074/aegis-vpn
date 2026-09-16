@@ -50,6 +50,11 @@ SERVICE_USER="vpnapi"
 BLOCKY_VERSION="${BLOCKY_VERSION:-v0.35.0}"
 UNBOUND_PORT="5335"    # Unbound moves off :53 to make room for Blocky
 
+# Second resolver address, for users who switch ad blocking off: Unbound reached
+# directly, no blocklist, still on this node. Defaults to .254 of the tunnel /24,
+# which IpAllocatorService reserves. Store it as the node's `dnsUnfiltered` column.
+TUNNEL_UNFILTERED_IP="${TUNNEL_UNFILTERED_IP:-${TUNNEL_SERVER_IP%.*}.254}"
+
 # ── Cloud detection ─────────────────────────────────────────────────────────────
 # Each provider answers on the link-local metadata address but with a different
 # handshake. Best-effort only: an unknown result is fine, it just means no
@@ -246,10 +251,16 @@ fi
 log "Unbound recursor on 127.0.0.1:${UNBOUND_PORT}"
 cat > /etc/unbound/unbound.conf.d/aegis-vpn.conf <<UNBOUND
 server:
-    # Loopback only. Blocky owns ${TUNNEL_SERVER_IP}:53 and is now the sole
-    # client here, so nothing inside the tunnel reaches Unbound directly — which
-    # is also why ip-freebind is gone: 127.0.0.1 always exists.
+    # Blocky is the only client for this one — it forwards here after filtering.
     interface: 127.0.0.1@${UNBOUND_PORT}
+
+    # The unfiltered resolver, reachable from inside the tunnel. Users who switch ad
+    # blocking off are sent here instead of to Blocky: same recursion, same box, no
+    # blocklist. The alternative — handing them a public resolver — would turn "I do
+    # not want filtering" into "my lookups now leave the node", which is not the deal.
+    interface: ${TUNNEL_UNFILTERED_IP}@53
+    # ${TUNNEL_UNFILTERED_IP} does not exist until wg0 is up, and unbound starts first.
+    ip-freebind: yes
 
     access-control: 0.0.0.0/0 refuse
     access-control: 127.0.0.0/8 allow
@@ -276,7 +287,7 @@ server:
 UNBOUND
 systemctl enable unbound >/dev/null 2>&1 || true
 systemctl restart unbound
-ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}"
+ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}, unfiltered on ${TUNNEL_UNFILTERED_IP}:53"
 
 # ── Blocky ──────────────────────────────────────────────────────────────────────
 log "Blocky ${BLOCKY_VERSION} (DNS filtering)"
@@ -614,6 +625,7 @@ $(printf '\033[1;32m')Provisioning complete.$(printf '\033[0m')
   Listening        ${PUBLIC_IP}:${WG_PORT}/udp
   Tunnel subnet    ${TUNNEL_NET}   DNS ${TUNNEL_SERVER_IP}   MTU ${WG_MTU}
   Resolver         blocky ${BLOCKY_VERSION} on ${TUNNEL_SERVER_IP}:53 -> unbound 127.0.0.1:${UNBOUND_PORT}
+  Unfiltered       ${TUNNEL_UNFILTERED_IP}:53 (set as the node's dnsUnfiltered column)
   Ad blocking      $(systemctl is-active blocky)   (allowlist: /etc/blocky/allowlist.txt)
 
   Server public key (put this in SEED_NODE_PUBLIC_KEY):

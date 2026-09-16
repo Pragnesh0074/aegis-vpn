@@ -12,6 +12,11 @@ export interface DeviceConfigResponse {
   tunnelIp: string;
   /** Resolver inside the tunnel, so DNS never leaves the node. */
   dns: string;
+  /**
+   * Which of the node's two resolvers `dns` points at, and whether this node offers
+   * a choice at all. Both are on the node; the difference is only the blocklist.
+   */
+  adBlocking: { enabled: boolean; supported: boolean };
   mtu: number;
 
   node: { id: string; name: string; region: string };

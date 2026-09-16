@@ -50,6 +50,13 @@ class DevicesRepository {
 
   /// `DELETE /devices/:id` → 204. Idempotent, and scoped to the caller: another
   /// user's device is indistinguishable from one that does not exist.
+  /// `GET /devices/:id/config`. Re-reads a config the app already cached, which is
+  /// how a resolver change reaches a device that already exists — the DNS is baked
+  /// into the tunnel at build time, so without this a toggle would never land.
+  Future<DeviceConfig> fetchConfig(String deviceId) async {
+    return DeviceConfig.fromJson(await _api.getJson(ApiEndpoints.deviceConfig(deviceId)));
+  }
+
   Future<void> revoke(String deviceId) => _api.delete(ApiEndpoints.device(deviceId));
 }
 

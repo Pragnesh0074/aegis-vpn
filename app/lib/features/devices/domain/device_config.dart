@@ -15,6 +15,10 @@ class DeviceConfig {
     required this.createdAt,
     required this.tunnelIp,
     required this.dns,
+    // Defaulted so a fixture that does not care about filtering need not say so.
+    // "On, and not switchable" is what every node did before the second resolver
+    // existed, so it is also the honest reading of a config that omits it.
+    this.adBlocking = const AdBlockingState(enabled: true, supported: false),
     required this.mtu,
     required this.node,
     required this.peer,
@@ -28,8 +32,13 @@ class DeviceConfig {
   /// The client's own `[Interface] Address`. Always a `/32`.
   final String tunnelIp;
 
-  /// Resolver inside the tunnel — Unbound on the node, so DNS never leaves it.
+  /// Resolver inside the tunnel — on the node, so DNS never leaves it. Which of
+  /// the node's two resolvers this is depends on [adBlocking].
   final String dns;
+
+  /// Whether [dns] is the filtering resolver, and whether this node offers a
+  /// choice at all.
+  final AdBlockingState adBlocking;
   final int mtu;
 
   final DeviceNode node;
@@ -43,6 +52,7 @@ class DeviceConfig {
       createdAt: DateTime.parse(json['createdAt'] as String),
       tunnelIp: json['tunnelIp'] as String,
       dns: json['dns'] as String,
+      adBlocking: AdBlockingState.fromJson(json['adBlocking'] as Map<String, dynamic>?),
       mtu: (json['mtu'] as num).toInt(),
       node: DeviceNode.fromJson(json['node'] as Map<String, dynamic>),
       peer: PeerConfig.fromJson(json['peer'] as Map<String, dynamic>),
@@ -60,6 +70,7 @@ class DeviceConfig {
         'createdAt': createdAt.toIso8601String(),
         'tunnelIp': tunnelIp,
         'dns': dns,
+        'adBlocking': adBlocking.toJson(),
         'mtu': mtu,
         'node': node.toJson(),
         'peer': peer.toJson(),
@@ -124,4 +135,30 @@ class PeerConfig {
         'allowedIps': allowedIps,
         'persistentKeepalive': persistentKeepalive,
       };
+}
+
+/// Mirrors the `adBlocking` object on `DeviceConfigResponse`.
+class AdBlockingState {
+  const AdBlockingState({required this.enabled, required this.supported});
+
+  /// True when `dns` points at the filtering resolver.
+  final bool enabled;
+
+  /// False on a node with only one resolver, where the switch cannot be honoured.
+  /// The UI uses this to explain itself instead of appearing to ignore the user.
+  final bool supported;
+
+  /// Tolerates the key being absent: a config cached before this field existed,
+  /// or a node still on an older API. Filtering was the only behaviour then, so
+  /// that is the honest default — and `supported: false` stops the UI promising a
+  /// switch that would do nothing.
+  factory AdBlockingState.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const AdBlockingState(enabled: true, supported: false);
+    return AdBlockingState(
+      enabled: json['enabled'] as bool? ?? true,
+      supported: json['supported'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'enabled': enabled, 'supported': supported};
 }

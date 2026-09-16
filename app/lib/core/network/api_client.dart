@@ -31,6 +31,11 @@ class ApiClient {
     return response.data ?? const {};
   }
 
+  Future<Map<String, dynamic>> patchJson(String path, {Object? body}) async {
+    final response = await _guard(() => _dio.patch<Map<String, dynamic>>(path, data: body));
+    return response.data ?? const {};
+  }
+
   /// For the endpoints that answer `204 No Content` — `/auth/logout` and
   /// `DELETE /devices/:id`.
   Future<void> postEmpty(String path, {Object? body}) {

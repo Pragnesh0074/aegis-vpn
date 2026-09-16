@@ -11,6 +11,7 @@ abstract final class ApiEndpoints {
 
   // users.controller.ts
   static const me = '/users/me';
+  static const meSettings = '/users/me/settings';
 
   // nodes.controller.ts
   static const nodes = '/nodes';
@@ -18,6 +19,7 @@ abstract final class ApiEndpoints {
   // devices.controller.ts
   static const devices = '/devices';
   static String device(String id) => '/devices/$id';
+  static String deviceConfig(String id) => '/devices/$id/config';
 
   // health.controller.ts
   static const health = '/health';

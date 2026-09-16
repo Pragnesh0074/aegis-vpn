@@ -29,6 +29,11 @@ TUNNEL_NET="${TUNNEL_NET:?set TUNNEL_NET, e.g. 10.8.0.0/24}"
 
 WG_IF="${WG_IF:-wg0}"
 UNBOUND_PORT="${UNBOUND_PORT:-5335}"
+
+# The unfiltered resolver's address, for users who switch ad blocking off. Defaults to
+# .254 of the tunnel's /24, which is outside the allocator's range and is reserved by
+# IpAllocatorService anyway. Store it as the node's `dnsUnfiltered` column.
+TUNNEL_UNFILTERED_IP="${TUNNEL_UNFILTERED_IP:-${TUNNEL_SERVER_IP%.*}.254}"
 BLOCKY_VERSION="${BLOCKY_VERSION:-v0.35.0}"
 
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -57,6 +62,11 @@ MISMATCH
 fi
 ok "${TUNNEL_SERVER_IP} is on ${WG_IF}"
 
+if [[ "$TUNNEL_UNFILTERED_IP" == "$TUNNEL_SERVER_IP" ]]; then
+  echo "TUNNEL_UNFILTERED_IP must differ from TUNNEL_SERVER_IP (both ${TUNNEL_SERVER_IP})" >&2
+  exit 1
+fi
+
 # Anything already on that address:53 would make the Blocky start fail, or worse,
 # be a resolver users are currently relying on.
 if ss -ulpn 2>/dev/null | grep -q "${TUNNEL_SERVER_IP}:53"; then
@@ -80,9 +90,16 @@ fi
 
 cat > /etc/unbound/unbound.conf.d/aegis-vpn.conf <<UNBOUND
 server:
-    # Loopback only. Blocky owns ${TUNNEL_SERVER_IP}:53 and is the sole client
-    # here, so nothing inside the tunnel reaches Unbound directly.
+    # Blocky is the only client for this one — it forwards here after filtering.
     interface: 127.0.0.1@${UNBOUND_PORT}
+
+    # The unfiltered resolver, reachable from inside the tunnel. Users who switch ad
+    # blocking off are sent here instead of to Blocky: same recursion, same box, no
+    # blocklist. The alternative — handing them a public resolver — would turn "I do
+    # not want filtering" into "my lookups now leave the node", which is not the deal.
+    interface: ${TUNNEL_UNFILTERED_IP}@53
+    # ${TUNNEL_UNFILTERED_IP} does not exist until wg0 is up, and unbound starts first.
+    ip-freebind: yes
 
     access-control: 0.0.0.0/0 refuse
     access-control: 127.0.0.0/8 allow
@@ -108,7 +125,7 @@ UNBOUND
 
 systemctl enable unbound >/dev/null 2>&1 || true
 systemctl restart unbound
-ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}"
+ok "unbound recursing on 127.0.0.1:${UNBOUND_PORT}, unfiltered on ${TUNNEL_UNFILTERED_IP}:53"
 
 # ── Blocky ──────────────────────────────────────────────────────────────────────
 log "Blocky ${BLOCKY_VERSION}"
@@ -291,9 +308,11 @@ sleep 20
 
 resolved="$(dig @"${TUNNEL_SERVER_IP}" example.com +short +timeout=5 2>/dev/null | tail -1)"
 blocked="$(dig @"${TUNNEL_SERVER_IP}" doubleclick.net +short +timeout=5 2>/dev/null | tail -1)"
+unfiltered="$(dig @"${TUNNEL_UNFILTERED_IP}" doubleclick.net +short +timeout=5 2>/dev/null | tail -1)"
 
-echo "  example.com      -> ${resolved:-<no answer>}"
-echo "  doubleclick.net  -> ${blocked:-<no answer>}"
+echo "  filtered   example.com      -> ${resolved:-<no answer>}"
+echo "  filtered   doubleclick.net  -> ${blocked:-<no answer>}"
+echo "  unfiltered doubleclick.net  -> ${unfiltered:-<no answer>}"
 
 [[ -n "$resolved" ]] || { warn "recursion is NOT working"; exit 1; }
 if [[ "$blocked" == "0.0.0.0" ]]; then
@@ -302,11 +321,22 @@ else
   warn "not blocking yet — lists may still be downloading. Re-check in a minute."
 fi
 
+# The point of the second address is that it does NOT filter. If it answers 0.0.0.0
+# the two listeners are crossed, and switching ad blocking off would change nothing.
+if [[ -z "$unfiltered" ]]; then
+  warn "unfiltered resolver ${TUNNEL_UNFILTERED_IP} did not answer"
+elif [[ "$unfiltered" == "0.0.0.0" ]]; then
+  warn "unfiltered resolver is BLOCKING — check the two interface lines in unbound.conf.d"
+else
+  ok "unfiltered resolver is not filtering, as intended"
+fi
+
 cat <<SUMMARY
 
 $(printf '\033[1;32m')Resolver installed.$(printf '\033[0m')
 
-  blocky ${BLOCKY_VERSION}  ${TUNNEL_SERVER_IP}:53  ->  unbound 127.0.0.1:${UNBOUND_PORT}
+  filtered    ${TUNNEL_SERVER_IP}:53   blocky ${BLOCKY_VERSION} -> unbound 127.0.0.1:${UNBOUND_PORT}
+  unfiltered  ${TUNNEL_UNFILTERED_IP}:53   unbound direct  (set this as the node's dnsUnfiltered)
   allowlist: /etc/blocky/allowlist.txt   metrics: 127.0.0.1:4000/metrics
 
   NOTHING CHANGED FOR USERS YET. Clients only use this once the node's 'dns'

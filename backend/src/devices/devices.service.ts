@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { WireguardService } from '../wireguard/wireguard.service';
 import type { DeviceConfigResponse, DeviceSummary } from './device.response';
+import { canToggleAdBlocking, resolverFor, type AdBlockSubject } from './dns-policy';
 import type { CreateDeviceDto } from './dto/create-device.dto';
 
 /** Full-tunnel routing. IPv6 is included so it is blackholed rather than leaking. */
@@ -79,7 +80,25 @@ export class DevicesService {
       `Issued peer ${device.tunnelIpV4} on ${node.name} for user ${userId} (device ${device.id})`,
     );
 
-    return this.toConfig(device, node);
+    return this.toConfig(device, node, await this.users.adBlockSubject(userId));
+  }
+
+  /**
+   * The full config for a device the caller already owns.
+   *
+   * The client caches its config at issuance, so without this there is no way to pick
+   * up a resolver change — which is how a fleet ends up with devices still pointed at
+   * whatever DNS was current the day they were created. The private key is not here
+   * and never was: the client holds the only copy.
+   */
+  async getConfig(userId: string, deviceId: string): Promise<DeviceConfigResponse> {
+    const device = await this.prisma.device.findFirst({
+      where: { id: deviceId, userId, revokedAt: null },
+      include: { node: true },
+    });
+    if (!device) throw new NotFoundException('Device not found');
+
+    return this.toConfig(device, device.node, await this.users.adBlockSubject(userId));
   }
 
   /**
@@ -190,14 +209,20 @@ export class DevicesService {
     this.logger.log(`Revoked device ${device.id} (${device.tunnelIpV4}) for user ${userId}`);
   }
 
-  private toConfig(device: Device, node: Node): DeviceConfigResponse {
+  private toConfig(device: Device, node: Node, subject: AdBlockSubject): DeviceConfigResponse {
     return {
       deviceId: device.id,
       name: device.name,
       platform: device.platform,
       createdAt: device.createdAt,
       tunnelIp: `${device.tunnelIpV4}/32`,
-      dns: node.dns,
+      dns: resolverFor(subject, node),
+      adBlocking: {
+        enabled: resolverFor(subject, node) === node.dns,
+        // False on a node with only the one resolver, so the client can explain why
+        // the switch is unavailable rather than appearing to ignore it.
+        supported: canToggleAdBlocking(node),
+      },
       mtu: node.mtu,
       node: { id: node.id, name: node.name, region: node.region },
       peer: {

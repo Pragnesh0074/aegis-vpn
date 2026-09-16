@@ -90,7 +90,7 @@ final class PlatformConnectWatcherProvider
 }
 
 String _$platformConnectWatcherHash() =>
-    r'764229f5792c321e7a4f7ebc8d8c8b8398157dc4';
+    r'84036d456ef4d15fea7399c76505694db8c80545';
 
 /// Serves the platform's requests for a tunnel it cannot build itself.
 ///

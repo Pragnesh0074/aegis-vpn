@@ -15,6 +15,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Whether this user's devices are handed the filtering resolver.
+  ///
+  /// Defaults to true so nobody loses filtering they already had. It is a *request*,
+  /// not an entitlement: `DnsPolicy` decides whether the user may actually have it,
+  /// which is where a paid plan will be enforced.
+  adBlockEnabled Boolean @default(true)
+
   devices       Device[]
   refreshTokens RefreshToken[]
 
@@ -49,7 +56,14 @@ model Node {
   publicKey  String
   endpoint   String
   subnetV4   String
+  /// Filtering resolver — Blocky, which sinkholes ads and forwards the rest to Unbound.
   dns        String
+  /// Unfiltered resolver on the same node: Unbound directly, no blocklist. Null on a
+  /// node that has not been reprovisioned for it, in which case ad blocking cannot be
+  /// switched off there and `dns` is used regardless.
+  ///
+  /// Both addresses are excluded from peer allocation — see `IpAllocatorService`.
+  dnsUnfiltered String?
   mtu        Int      @default(1420)
   maxPeers   Int      @default(250)
   active     Boolean  @default(true)
