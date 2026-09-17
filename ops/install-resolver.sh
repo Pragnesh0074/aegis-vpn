@@ -98,13 +98,6 @@ server:
     # Blocky is the only client for this one — it forwards here after filtering.
     interface: 127.0.0.1@${UNBOUND_PORT}
 
-    # The unfiltered resolver, reachable from inside the tunnel. Users who switch ad
-    # blocking off are sent here instead of to Blocky: same recursion, same box, no
-    # blocklist. The alternative — handing them a public resolver — would turn "I do
-    # not want filtering" into "my lookups now leave the node", which is not the deal.
-    interface: ${TUNNEL_UNFILTERED_IP}@53
-    # ${TUNNEL_UNFILTERED_IP} does not exist until wg0 is up, and unbound starts first.
-    ip-freebind: yes
 
     access-control: 0.0.0.0/0 refuse
     access-control: 127.0.0.0/8 allow
@@ -251,6 +244,18 @@ caching:
   prefetching: true
   cacheTimeNegative: 10m
 
+# The node has no IPv6 egress at all — no global address on the NIC, forwarding
+# off — while peers route ::/0 into the tunnel so v6 cannot leak around the VPN.
+# Handing out AAAA therefore points clients at addresses that silently blackhole:
+# they wait for a reply that cannot come, and the app reports a network timeout.
+# Google is IPv6-heavy, so AdMob broke on this while IPv4-only traffic was fine.
+#
+# Dropping AAAA makes clients use IPv4, which works. Remove this only when the
+# node genuinely has IPv6 egress.
+filtering:
+  queryTypes:
+    - AAAA
+
 prometheus:
   enable: true
   path: /metrics
@@ -340,6 +345,112 @@ if systemctl is-active --quiet blocky; then
 else
   warn "BLOCKY FAILED TO START. journalctl -u blocky -n 50 --no-pager"
   exit 1
+fi
+
+# ── Blocky (unfiltered) ─────────────────────────────────────────────────────────
+# A second instance on ${TUNNEL_UNFILTERED_IP} with no blocklists, for users who
+# have switched ad blocking off.
+#
+# Unbound used to serve this address directly. It cannot any more, because the one
+# thing both resolvers must now do — refuse AAAA — is something Unbound has no
+# global switch for and Blocky does. Same recursion behind it either way: both
+# instances forward to the same Unbound on loopback, so a user who turns filtering
+# off still has their lookups answered on this node and not by a public resolver.
+log "Blocky (unfiltered) on ${TUNNEL_UNFILTERED_IP}:53"
+
+cat > /etc/blocky/config-unfiltered.yml <<UNFILTERED
+# Managed by ops — re-running overwrites this file.
+# No denylists on purpose: this is the resolver for users with ad blocking OFF.
+
+ports:
+  dns:
+    - ${TUNNEL_UNFILTERED_IP}:53
+  # Separate port from the filtering instance, loopback only.
+  http: 127.0.0.1:4001
+  freeBind: true
+
+upstreams:
+  groups:
+    default:
+      - tcp+udp:127.0.0.1:${UNBOUND_PORT}
+  strategy: strict
+  timeout: 5s
+  init:
+    strategy: fast
+
+bootstrapDns:
+  - tcp+udp:127.0.0.1:${UNBOUND_PORT}
+
+# The whole reason this instance exists — see the note in the filtering config.
+filtering:
+  queryTypes:
+    - AAAA
+
+caching:
+  minTime: 5m
+  maxTime: 30m
+  maxItemsCount: 25000
+  cacheTimeNegative: 10m
+
+prometheus:
+  enable: true
+  path: /metrics
+
+queryLog:
+  type: none
+
+log:
+  level: info
+  privacy: true
+UNFILTERED
+
+cat > /etc/systemd/system/blocky-unfiltered.service <<'UNFILTEREDUNIT'
+[Unit]
+Description=Blocky (unfiltered resolver) for the Aegis tunnel
+After=network-online.target unbound.service
+Wants=network-online.target unbound.service
+
+[Service]
+ExecStart=/usr/local/bin/blocky --config /etc/blocky/config-unfiltered.yml
+User=blocky
+Group=blocky
+Restart=on-failure
+RestartSec=5s
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+CacheDirectory=blocky-unfiltered
+CacheDirectoryMode=0750
+
+[Install]
+WantedBy=multi-user.target
+UNFILTEREDUNIT
+
+systemctl daemon-reload
+systemctl enable blocky-unfiltered >/dev/null 2>&1 || true
+systemctl restart blocky-unfiltered || true
+
+if systemctl is-active --quiet blocky-unfiltered; then
+  ok "unfiltered resolver answering on ${TUNNEL_UNFILTERED_IP}:53"
+else
+  warn "BLOCKY-UNFILTERED FAILED TO START — users with ad blocking off have no DNS."
+  warn "  journalctl -u blocky-unfiltered -n 50 --no-pager"
 fi
 
 # ── Verify ──────────────────────────────────────────────────────────────────────

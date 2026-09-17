@@ -153,6 +153,8 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 
 Append here as decisions are made, so a later session does not re-litigate them.
 
+| 2026-09-17 | **Neither resolver answers AAAA**, and the unfiltered one moved from Unbound to a second Blocky instance to make that possible | The node has no IPv6 egress — no global v6 address on ens5, `curl -6` fails, forwarding off — while peers route `::/0` into the tunnel so v6 cannot leak around the VPN. Handing out AAAA therefore pointed clients at addresses that silently blackhole: they waited for a reply that could not come and the app reported a network timeout. Google is IPv6-heavy, so this broke AdMob (`LoadAdError code 2, Network error`) while IPv4-only traffic, including our own API by bare IP, was unaffected. Blocky can drop AAAA (`filtering.queryTypes`); Unbound has no global switch for it, so `10.8.0.254` is now a second Blocky with no denylists. Both still forward to the same Unbound, so turning ad blocking off still does not move anyone off the node's own DNS |
+
 | 2026-09-16 | The unfiltered resolver's address must be **assigned to wg0**, not merely freebind-bound | `ip-freebind` lets unbound bind an address that does not exist yet, which is what gets it through boot — but it does not make the address *reachable*. A packet arriving for an address the kernel does not consider local is forwarded, not delivered, so the listener never sees it and unbound cannot even send replies (`udp_send_cb` errors in the journal). Caught in production: `dig @10.8.0.254` returned "no servers could be reached" while `ss` cheerfully showed unbound listening on it. Both scripts now `ip addr add` it and persist it in the `Address =` line of `wg0.conf` |
 
 | Date | Decision | Why |
