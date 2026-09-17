@@ -9,8 +9,11 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
-    "paths": { "src/*": ["src/*"] },
+    // No "baseUrl": it is deprecated and becomes an error in TypeScript 7. Since
+    // 4.1 "paths" resolves relative to this file on its own, so dropping it
+    // changes nothing — and the mapping is only here to match Jest's
+    // moduleNameMapper, since no import actually uses it yet.
+    "paths": { "src/*": ["./src/*"] },
     "incremental": true,
     "skipLibCheck": true,
     "strict": true,
