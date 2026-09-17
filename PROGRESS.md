@@ -42,7 +42,7 @@ history, quick-settings tile, node health + failover)
 | M3 | What "automatic" means across countries | ✅ done |
 | K1 | Kill switch (auto-reconnect + system lockdown guidance) | ✅ done |
 | D1 | `Device.lastSeenAt` written from peer handshakes | ✅ done |
-| V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done |
+| V1 | Exit verification (`GET /whoami` + connect-screen check) | 🟡 reopened — card removed, needs a server-attested replacement |
 | S1 | Split tunnelling (per-app exclusions) | ✅ done |
 | A1 | Auto-connect on untrusted Wi-Fi | ✅ done |
 | H1 | Session history (on-device) | ✅ done |
@@ -152,6 +152,9 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-17 | **The app excludes itself from the tunnel**, always, and the AdMob allowlist is gone | AdMob will not serve a rewarded ad to a request from a cloud exit address — confirmed by testing both ways: the same ad loads with the VPN off and fails with it on, every time, as `LoadAdError code 2`. Since the ad is what buys ad blocking, a tunnel that swallows it makes the feature unusable. Excluding our own package sends its ad traffic out over the phone's own connection, and confines the exemption to this app instead of weakening everybody's filtering: the five AdMob hosts are no longer allowlisted, so `pagead2` and `tpc` web ads are blocked for users again. Our own traffic is API calls and ads, neither of which anyone runs a VPN to hide from us |
+| 2026-09-17 | The exit check came off the connect screen, and V1 is reopened | It asked the API what source address our request arrived from — the one claim on that screen a broken tunnel could not fake. With this app outside the tunnel the API always sees the phone's real address, so the card would report a leak on every healthy connection. A false alarm where the user looks for proof is worse than no proof. `ExitCheckCard` and `/whoami` are intact and still tested directly; the honest replacement is server-attested — the node knows the peer's last handshake and byte counters, which a device cannot fake about itself |
 
 | 2026-09-17 | **Neither resolver answers AAAA**, and the unfiltered one moved from Unbound to a second Blocky instance to make that possible | The node has no IPv6 egress — no global v6 address on ens5, `curl -6` fails, forwarding off — while peers route `::/0` into the tunnel so v6 cannot leak around the VPN. Handing out AAAA therefore pointed clients at addresses that silently blackhole: they waited for a reply that could not come and the app reported a network timeout. Google is IPv6-heavy, so this broke AdMob (`LoadAdError code 2, Network error`) while IPv4-only traffic, including our own API by bare IP, was unaffected. Blocky can drop AAAA (`filtering.queryTypes`); Unbound has no global switch for it, so `10.8.0.254` is now a second Blocky with no denylists. Both still forward to the same Unbound, so turning ad blocking off still does not move anyone off the node's own DNS |
 

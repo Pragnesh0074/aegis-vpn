@@ -452,18 +452,11 @@ else
 # tracking and OAuth login flows. When a user reports a broken site, add the
 # domain here and run:  systemctl reload blocky
 
-# ── AdMob ───────────────────────────────────────────────────────────────────────
-# The rewarded ad that BUYS ad blocking has to be able to load while ad blocking is
-# on, or extending a grant is impossible: the user would need the very domains they
-# just paid to block. Kept to the hosts the mobile SDK actually needs.
-#
-# Honest cost: pagead2 and tpc also serve web ads, so exempting them lets some
-# through. That is the unavoidable price of funding a blocker with ads.
-googleads.g.doubleclick.net
-pagead2.googlesyndication.com
-tpc.googlesyndication.com
-imasdk.googleapis.com
-googleadservices.com
+# No AdMob exemption here, deliberately. The rewarded ad that funds ad blocking
+# used to need one, which meant weakening everybody's filtering — pagead2 and tpc
+# serve web ads too — so that our own ad could load. The app is now excluded from
+# the tunnel instead, so its ad traffic never reaches this resolver and nobody
+# else's blocking pays for it.
 ALLOWLIST
   ok "empty allowlist created at /etc/blocky/allowlist.txt"
 fi

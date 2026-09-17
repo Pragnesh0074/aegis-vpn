@@ -25,6 +25,7 @@ import 'package:aegis_vpn/features/tunnel/presentation/tunnel_metrics.dart';
 import 'package:aegis_vpn/features/tunnel/presentation/widgets/connect_orb.dart';
 import 'package:aegis_vpn/features/whoami/domain/exit_check.dart';
 import 'package:aegis_vpn/features/whoami/presentation/exit_check_providers.dart';
+import 'package:aegis_vpn/features/whoami/presentation/widgets/exit_check_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
@@ -177,9 +178,12 @@ void main() {
         expect(find.text('India'), findsOneWidget);
         expect(find.text('AUTO'), findsOneWidget);
 
-        // The one claim on this screen the device does not make about itself.
-        expect(find.text('You appear as 49.36.180.22'), findsOneWidget);
-        expect(find.textContaining('Your real address'), findsOneWidget);
+        // The exit check is deliberately NOT here. This app is excluded from the
+        // tunnel so AdMob will serve the ad that pays for ad blocking, which
+        // means the API always sees the phone's own address — the card would
+        // cry leak on every healthy connection. Its own tests below still pin
+        // the widget's behaviour for when a server-attested version returns.
+        expect(find.byType(ExitCheckCard), findsNothing);
 
         expect(tester.takeException(), isNull);
       });
@@ -455,11 +459,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // Pumped directly: the card is no longer mounted on the connect screen, but it
+  // is still correct code and the behaviour is worth holding still until the
+  // server-attested replacement lands.
   testWidgets('the exit check names the country the server saw us from',
       (tester) async {
     await pumpScreen(
       tester,
-      const ConnectScreen(),
+      const ExitCheckCard(),
       overrides: [
         ...fleet(seenAs: viaFrankfurt),
         tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
@@ -479,7 +486,7 @@ void main() {
     // API from the device's own address.
     await pumpScreen(
       tester,
-      const ConnectScreen(),
+      const ExitCheckCard(),
       overrides: [
         ...fleet(),
         tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
@@ -487,7 +494,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Protected'), findsOneWidget);
     expect(find.text('Your traffic is not exiting through Aegis'), findsOneWidget);
     expect(
       find.textContaining('not one of our servers'),

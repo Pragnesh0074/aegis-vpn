@@ -16,7 +16,6 @@ import '../../tunnel/presentation/tunnel_metrics.dart';
 import '../../tunnel/presentation/vpn_session.dart';
 import '../../tunnel/presentation/widgets/connect_orb.dart';
 import '../../tunnel/presentation/widgets/throughput_panel.dart';
-import '../../whoami/presentation/widgets/exit_check_card.dart';
 
 /// The landing screen: one button, what it is doing, and where it goes.
 ///
@@ -94,12 +93,23 @@ class ConnectScreen extends ConsumerWidget {
                         SizedBox(height: 24.h),
                         ThroughputPanel(isUp: status.state.isUp),
                         SizedBox(height: 12.h),
-                        // Directly under the counters, which are the claim this
-                        // verifies: bytes moving through an interface is not the
-                        // same as traffic leaving the country the app says it
-                        // does.
-                        const ExitCheckCard(),
-                        SizedBox(height: 12.h),
+                        // The exit check used to sit here, and cannot any more.
+                        //
+                        // It worked by asking the API what source address our
+                        // request arrived from — the one claim on this screen a
+                        // broken tunnel could not fake. This app is now excluded
+                        // from the tunnel on purpose, so AdMob will serve the
+                        // rewarded ad that pays for ad blocking, which means the
+                        // API always sees the phone's real address and the check
+                        // would report a leak on every connection. A false alarm
+                        // in the place the user looks for proof is worse than no
+                        // proof at all.
+                        //
+                        // `ExitCheckCard` and `/whoami` are left intact. The
+                        // honest replacement is server-attested: the node knows
+                        // this peer's last handshake and byte counters, and a
+                        // device cannot fake what the server measured about it.
+                        // See PROGRESS.
                         LocationSummaryCard(
                           onTap: () => context.go(AppRoutes.locations),
                         ),

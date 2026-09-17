@@ -763,7 +763,21 @@ class TunnelBridge(
         // Excluded rather than included: an allow-list would silently drop every
         // app installed after it was written off the tunnel, which is the failure
         // a VPN must not have. Excluding names only what the user chose.
-        val excluded = installedOnly(call.argument<List<String>>("excludedApps").orEmpty())
+        //
+        // Aegis excludes ITSELF, always, and not as a preference the user can undo.
+        // AdMob will not serve a rewarded ad to a request arriving from a cloud
+        // exit address — verified: the same ad loads with the VPN off and fails
+        // with it on, every time, as `LoadAdError code 2`. Since the ad is what
+        // buys the ad blocking, a tunnel that swallows it makes the feature
+        // impossible to use. Our own traffic is API calls and ads, neither of
+        // which the user is running a VPN to hide from us.
+        //
+        // This also confines the AdMob allowlist to this app: the resolver no
+        // longer has to exempt ad domains for everybody just so our own ad can
+        // load, so nobody else's blocking is weakened to pay for it.
+        val excluded = installedOnly(
+            call.argument<List<String>>("excludedApps").orEmpty() + activity.packageName,
+        )
         if (excluded.isNotEmpty()) builder.excludeApplications(excluded)
 
         val iface = builder.build()
