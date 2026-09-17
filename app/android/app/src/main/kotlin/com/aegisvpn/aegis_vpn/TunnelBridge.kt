@@ -16,6 +16,7 @@ import android.net.NetworkRequest
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.provider.Settings
+import android.util.Log
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -779,6 +780,17 @@ class TunnelBridge(
             call.argument<List<String>>("excludedApps").orEmpty() + activity.packageName,
         )
         if (excluded.isNotEmpty()) builder.excludeApplications(excluded)
+
+        // Logged because this is invisible from inside the app and was, once,
+        // silently absent: a Kotlin change does not reach the device on a hot
+        // restart, so the tunnel kept carrying our own traffic while the Dart
+        // side looked correct. If our package is not in this line, the running
+        // APK is stale — rebuild rather than debug the resolver.
+        Log.i(
+            "AegisTunnel",
+            "excluding ${excluded.size} app(s) from the tunnel: $excluded " +
+                "(self=${activity.packageName in excluded})",
+        )
 
         val iface = builder.build()
 
