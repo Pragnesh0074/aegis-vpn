@@ -42,6 +42,11 @@ class ProfileScreen extends ConsumerWidget {
         onRefresh: () => ref.refresh(userProfileProvider.future),
         child: AsyncView(
           value: profile,
+          // A loader while it refetches, rather than the previous profile. Every
+          // figure here moves together — entitlement, the trial countdown, the
+          // lock on each setting — so keeping the old one on screen means the
+          // page rewrites itself piece by piece as the new one lands.
+          skipLoadingOnRefresh: false,
           onRetry: () => ref.invalidate(userProfileProvider),
           data: (data) => ListView(
             padding: Gap.page,

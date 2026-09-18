@@ -15,18 +15,26 @@ class AsyncView<T> extends StatelessWidget {
     required this.value,
     required this.data,
     this.onRetry,
+    this.skipLoadingOnRefresh = true,
   });
 
   final AsyncValue<T> value;
   final Widget Function(T data) data;
   final VoidCallback? onRetry;
 
+  /// Whether a refresh keeps the old content on screen.
+  ///
+  /// True suits a list the user is reading — a spinner over it would be worse
+  /// than a moment of staleness. False suits a screen whose values change
+  /// together, like the account page: there, holding the old data means the
+  /// figures visibly rewrite themselves one after another, and a loader is the
+  /// calmer answer.
+  final bool skipLoadingOnRefresh;
+
   @override
   Widget build(BuildContext context) {
     return value.when(
-      // `skipLoadingOnRefresh` keeps the current list on screen during a pull to
-      // refresh instead of flashing a spinner over content the user is reading.
-      skipLoadingOnRefresh: true,
+      skipLoadingOnRefresh: skipLoadingOnRefresh,
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => AppErrorView(error: error, onRetry: onRetry),
       data: data,
