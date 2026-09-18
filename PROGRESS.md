@@ -45,6 +45,7 @@ history, quick-settings tile, node health + failover)
 | V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done — card restored when the self-exclusion was reverted |
 | S1 | Split tunnelling (per-app exclusions) | ✅ done |
 | A1 | Auto-connect on untrusted Wi-Fi | ✅ done |
+| A2 | Ask on joining an untrusted network; remember networks joined | ✅ done — app rebuild pending |
 | H1 | Session history (on-device) | ✅ done |
 | Q1 | Quick Settings tile | ✅ done |
 | N1 | Node health + failover | ✅ done |
@@ -152,6 +153,10 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-18 | Networks are learned by **joining** them, not by scanning for them | The ask was to list every nearby Wi-Fi and prompt on connect. `WifiManager.getScanResults()` would do it and is the wrong tool: throttled to 4 scans per 2 minutes in the foreground since Android 9, requires location services actually switched ON rather than just permitted, wants `NEARBY_WIFI_DEVICES` on 13+, invites a Play permissions review for a VPN, and lists every neighbour's router. Recording SSIDs from the `onAvailable` callback we already run needs no new permission and yields only networks the user genuinely uses — which is the list that answers "is this one trusted?" |
+| 2026-09-18 | The prompt reports, it does not ask first | Auto-connect brings the tunnel up and the notice offers to stop doing that here in future. Asking before connecting would leave someone sitting unprotected on an unknown network while a dialog waits for a person who may not be looking at their phone — the wrong default for the one feature whose entire job is covering the moment they are not |
+| 2026-09-18 | The notification launches the app rather than writing the trusted list itself | That list lives in Flutter secure storage, which native cannot reach. The SSID rides in on the intent and Dart writes it, so the decision lands in the one place that owns it and still works from a cold start |
 
 | 2026-09-18 | Trusted networks get their own screen, reachable from the account page | Folding the Protection page into Account (U1) replaced the auto-connect card with a bare switch and orphaned `AutoConnectCard` — nothing referenced it. The trusted-list logic stayed live and enforced, so auto-connect went on firing for every Wi-Fi NOT on the list while the only way to add to that list had been deleted. A new account would connect on its own home network forever with no way to stop it short of turning the feature off. The screen also carries the location-permission ask, without which Android will not name a network and every one reads as untrusted |
 

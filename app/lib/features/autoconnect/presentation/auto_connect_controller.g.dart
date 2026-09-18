@@ -54,7 +54,7 @@ final class AutoConnectProvider
   AutoConnect create() => AutoConnect();
 }
 
-String _$autoConnectHash() => r'661ef23260bdc717d3d836248637facff0dec8d2';
+String _$autoConnectHash() => r'2254af5968c49f88af0cb57ecf9b2f86e9ab0a47';
 
 /// Auto-connect, and the job of keeping the platform in step with it.
 ///

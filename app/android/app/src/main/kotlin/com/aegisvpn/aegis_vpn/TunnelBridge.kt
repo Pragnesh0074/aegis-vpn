@@ -228,6 +228,21 @@ class TunnelBridge(
                 emit()
                 result.success(null)
             }
+            // Dart has shown the "you joined an untrusted network" prompt, so the
+            // flag is spent. One-shot on purpose: someone who dismissed it should
+            // not be asked again on every status poll.
+            "ackUntrustedWifi" -> {
+                TunnelHost.pendingUntrustedSsid = null
+                UntrustedWifiNotice.dismiss(activity.applicationContext)
+                emit()
+                result.success(null)
+            }
+            // Dart has written the notification's SSID to the trusted list it owns.
+            "ackTrustRequest" -> {
+                TunnelHost.trustRequestedSsid = null
+                emit()
+                result.success(null)
+            }
             "requestAddTile" -> requestAddTile(result)
             "requestWifiPermission" -> requestWifiPermission(result)
             "openVpnSettings" -> {
@@ -560,8 +575,23 @@ class TunnelBridge(
         lastAutoNetwork = network
 
         val ssid = ssidOf(network)
+
+        // Recorded whether trusted or not: the "recently joined" list is how a
+        // user marks a network without waiting to be standing on it, and it only
+        // ever holds networks they actually connected to.
+        if (ssid != null) TunnelHost.lastJoinedSsid = ssid
+
         if (ssid != null && trustedSsids.contains(ssid.lowercase())) return
         if (state == Tunnel.State.UP) return
+
+        // Untrusted, and we are about to bring the tunnel up because of it. Offer
+        // the user the other choice — the notification covers the case this
+        // feature is actually for, where the app is nowhere on screen and an
+        // in-app banner would never be seen.
+        if (ssid != null) {
+            TunnelHost.pendingUntrustedSsid = ssid
+            UntrustedWifiNotice.show(activity.applicationContext, ssid)
+        }
 
         // Arriving somewhere new is a fresh intent to be protected, so an earlier
         // manual teardown no longer stands in the way.
@@ -596,6 +626,20 @@ class TunnelBridge(
      * stream is already the one channel the app is guaranteed to be listening to.
      */
     private fun requestAutoConnectFromDart() = TunnelHost.requestConnect()
+
+    /**
+     * The notification's "Trust this network" was tapped.
+     *
+     * Published through the status snapshot rather than as its own call, for the
+     * same reason auto-connect requests are: on a cold start Dart is not
+     * listening yet, and a field that persists until it is cannot be missed,
+     * where a one-off invoke would be.
+     */
+    fun trustFromNotification(ssid: String) {
+        TunnelHost.trustRequestedSsid = ssid
+        TunnelHost.pendingUntrustedSsid = null
+        main.post { emit() }
+    }
 
     /** The current Wi-Fi network's name, for the "trust this network" button. */
     private fun currentWifi(): Map<String, Any?> {
@@ -812,6 +856,9 @@ class TunnelBridge(
             "autoConnect" to autoConnect,
             "connectRequestedAt" to TunnelHost.connectRequestedAt,
             "wifiPermission" to hasWifiPermission(),
+            "joinedSsid" to TunnelHost.lastJoinedSsid,
+            "untrustedSsid" to TunnelHost.pendingUntrustedSsid,
+            "trustRequestedSsid" to TunnelHost.trustRequestedSsid,
         )
     }
 

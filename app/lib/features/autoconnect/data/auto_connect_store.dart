@@ -34,6 +34,7 @@ class AutoConnectStore {
       return AutoConnectSettings(
         enabled: decoded['enabled'] == true,
         trusted: (decoded['trusted'] as List?)?.whereType<String>().toList() ?? const [],
+        seen: (decoded['seen'] as List?)?.whereType<String>().toList() ?? const [],
       );
     } on FormatException {
       // Unreadable reads as off rather than as on-with-no-trusted-networks: the
@@ -45,7 +46,11 @@ class AutoConnectStore {
   Future<void> write(AutoConnectSettings settings) {
     return _store.write(
       _key,
-      jsonEncode({'enabled': settings.enabled, 'trusted': settings.trusted}),
+      jsonEncode({
+        'enabled': settings.enabled,
+        'trusted': settings.trusted,
+        'seen': settings.seen,
+      }),
     );
   }
 }

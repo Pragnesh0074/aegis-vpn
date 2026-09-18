@@ -56,6 +56,29 @@ class AutoConnect extends _$AutoConnect {
     return ssid;
   }
 
+  /// Trusts [ssid] by name.
+  ///
+  /// The by-name counterpart to [trustCurrentNetwork], for the two cases where
+  /// the user is deciding about a network they are not standing on: the
+  /// notification's action, and the "recently joined" list. Both supply a name
+  /// the device genuinely connected to, which is what makes taking one safe here
+  /// when typing one would not be.
+  Future<void> trust(String ssid) async {
+    final current = state.value ?? AutoConnectSettings.off;
+    if (current.trusts(ssid)) return;
+    await _apply((settings) => settings.copyWith(trusted: [...settings.trusted, ssid]));
+  }
+
+  /// Records a network the device joined, so it can be trusted later.
+  ///
+  /// Cheap and idempotent: called on every status emit that names a network, and
+  /// does nothing when that network is already the most recent one.
+  Future<void> remember(String ssid) async {
+    final current = state.value ?? AutoConnectSettings.off;
+    if (current.seen.isNotEmpty && current.seen.first == ssid) return;
+    await _apply((settings) => settings.remember(ssid));
+  }
+
   Future<void> forget(String ssid) {
     return _apply(
       (settings) => settings.copyWith(

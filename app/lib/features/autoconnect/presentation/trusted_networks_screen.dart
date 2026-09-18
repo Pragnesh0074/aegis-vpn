@@ -109,7 +109,89 @@ class TrustedNetworksScreen extends ConsumerWidget {
                   ssid: ssid,
                   onForget: () => ref.read(autoConnectProvider.notifier).forget(ssid),
                 ),
+
+            // Networks this device has actually joined. The point of the list is
+            // that you can trust the office from your sofa — without it, the only
+            // way to add a network is to be standing on it, which means nobody
+            // ever sets this up until the moment it is already too late.
+            if (settings.untrustedSeen.isNotEmpty) ...[
+              Gap.lg,
+              Text(
+                'RECENTLY JOINED',
+                style: TextStyle(
+                  fontSize: 10.5.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                'Networks this phone has connected to. Aegis turns on for all of '
+                'them until you say otherwise.',
+                style: TextStyle(fontSize: 12.sp, color: AppColors.textMuted, height: 1.35),
+              ),
+              SizedBox(height: 10.h),
+              for (final ssid in settings.untrustedSeen)
+                _SeenRow(
+                  ssid: ssid,
+                  isCurrent: ssid == current,
+                  onTrust: () => ref.read(autoConnectProvider.notifier).trust(ssid),
+                ),
+            ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A network the device has joined but not trusted, with the one action that
+/// matters. No "forget": it is a record of where this phone has been, and
+/// removing an entry would only mean it reappears the next time you go there.
+class _SeenRow extends StatelessWidget {
+  const _SeenRow({
+    required this.ssid,
+    required this.isCurrent,
+    required this.onTrust,
+  });
+
+  final String ssid;
+  final bool isCurrent;
+  final VoidCallback onTrust;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 8.h),
+      padding: EdgeInsets.only(left: 14.w, right: 6.w, top: 4.h, bottom: 4.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: AppColors.outline),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.wifi, size: 17.r, color: AppColors.textMuted),
+          SizedBox(width: 12.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ssid,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.5.sp, color: AppColors.textHigh),
+                ),
+                if (isCurrent)
+                  Text(
+                    "you're on this now",
+                    style: TextStyle(fontSize: 11.sp, color: AppColors.accent),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onTrust, child: const Text('Trust')),
         ],
       ),
     );

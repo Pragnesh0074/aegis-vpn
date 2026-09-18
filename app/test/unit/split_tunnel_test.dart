@@ -111,6 +111,11 @@ void main() {
 
 /// Records what the platform layer was asked to do.
 class _RecordingChannel implements TunnelChannel {
+  @override
+  Future<void> ackUntrustedWifi() async {}
+
+  @override
+  Future<void> ackTrustRequest() async {}
   List<String>? excluded;
 
   @override

@@ -201,6 +201,33 @@ class TunnelChannel {
     }
   }
 
+  /// Tells the platform the "you joined an untrusted network" prompt has been
+  /// shown, so it stops republishing it on every status poll.
+  ///
+  /// Swallows a missing implementation like the other acks: an older platform
+  /// simply never sets the flag, and failing here would break a status refresh.
+  Future<void> ackUntrustedWifi() async {
+    try {
+      await _methods.invokeMethod<void>('ackUntrustedWifi');
+    } on PlatformException {
+      // Nothing to acknowledge.
+    } on MissingPluginException {
+      // No platform implementation.
+    }
+  }
+
+  /// Tells the platform the notification's SSID has been written to the trusted
+  /// list Dart owns.
+  Future<void> ackTrustRequest() async {
+    try {
+      await _methods.invokeMethod<void>('ackTrustRequest');
+    } on PlatformException {
+      // Nothing to acknowledge.
+    } on MissingPluginException {
+      // No platform implementation.
+    }
+  }
+
   /// Asks Android to offer the user the Quick Settings tile.
   ///
   /// False when the device declined, the user declined, or the platform is older

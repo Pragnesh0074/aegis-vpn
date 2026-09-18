@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../autoconnect/presentation/auto_connect_controller.dart';
+import '../../autoconnect/presentation/wifi_notice_watcher.dart';
 import '../../history/presentation/session_recorder.dart';
 import '../../killswitch/presentation/kill_switch_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
@@ -40,7 +41,11 @@ class HomeShell extends ConsumerWidget {
       ..watch(sessionRecorderProvider)
       // Serves a connect the platform asked for but could not perform: a tile
       // tapped on a cold start, or auto-connect holding no config.
-      ..watch(platformConnectWatcherProvider);
+      ..watch(platformConnectWatcherProvider)
+      // Records joined networks and catches the "you are on an untrusted
+      // network" notice. Here for the same reason as the rest: the join it
+      // exists to catch happens with no screen open.
+      ..watch(wifiNoticeWatcherProvider);
 
     // The shield tints while the tunnel is up, so the state is legible from any
     // tab without having to go back to the connect screen.

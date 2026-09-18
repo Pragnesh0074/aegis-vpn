@@ -11,6 +11,11 @@
          it every Wi-Fi counts as untrusted — the app still works, it just cannot
          tell your home network from a café's. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <!-- Android 13+. Only used to tell the user the tunnel came up because the
+         Wi-Fi they joined is not trusted, and to offer to trust it — the case
+         auto-connect exists for is precisely the one where the app is not on
+         screen to say so itself. Denying it costs the notice, nothing else. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="aegis_vpn"

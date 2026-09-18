@@ -8,6 +8,7 @@ import '../../../core/router/app_routes.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
+import '../../autoconnect/presentation/widgets/untrusted_wifi_banner.dart';
 import '../../nodes/presentation/widgets/location_summary_card.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import '../../tunnel/domain/tunnel_status.dart';
@@ -92,6 +93,7 @@ class ConnectScreen extends ConsumerWidget {
                           _Failure(error: failure),
                         ],
                         SizedBox(height: 24.h),
+                        const UntrustedWifiBanner(),
                         ThroughputPanel(isUp: status.state.isUp),
                         SizedBox(height: 12.h),
                         // Directly under the counters, which are the claim this

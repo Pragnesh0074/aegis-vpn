@@ -132,6 +132,11 @@ class _RecordingSession extends VpnSession {
 }
 
 class _RecordingChannel implements TunnelChannel {
+  @override
+  Future<void> ackUntrustedWifi() async {}
+
+  @override
+  Future<void> ackTrustRequest() async {}
   int acks = 0;
 
   @override

@@ -62,6 +62,9 @@ class TunnelStatus {
     this.autoConnect = false,
     this.connectRequestedAt,
     this.hasWifiPermission = false,
+    this.joinedSsid,
+    this.untrustedSsid,
+    this.trustRequestedSsid,
   });
 
   final TunnelState state;
@@ -102,6 +105,21 @@ class TunnelStatus {
   /// auto-connect treats every network as untrusted.
   final bool hasWifiPermission;
 
+  /// The last Wi-Fi network this device joined, trusted or not. Recorded so the
+  /// user can mark it later without having to be standing on it.
+  final String? joinedSsid;
+
+  /// A network auto-connect brought the tunnel up on because it was not trusted.
+  ///
+  /// Stays set until the app acknowledges it, for the same reason as
+  /// [connectRequestedAt]: the join happens with the app in the background, and
+  /// a signal that had to be caught at that instant would simply be missed.
+  final String? untrustedSsid;
+
+  /// An SSID the user asked to trust from the notification, waiting to be
+  /// written to the list Dart owns.
+  final String? trustRequestedSsid;
+
   static const disconnected = TunnelStatus(state: TunnelState.disconnected);
 
   factory TunnelStatus.fromJson(Map<String, dynamic> json) {
@@ -132,6 +150,9 @@ class TunnelStatus {
         _ => null,
       },
       hasWifiPermission: json['wifiPermission'] as bool? ?? false,
+      joinedSsid: json['joinedSsid'] as String?,
+      untrustedSsid: json['untrustedSsid'] as String?,
+      trustRequestedSsid: json['trustRequestedSsid'] as String?,
     );
   }
 }

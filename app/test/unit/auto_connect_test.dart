@@ -109,6 +109,11 @@ ProviderContainer _container(TunnelChannel channel) {
 }
 
 class _RecordingChannel implements TunnelChannel {
+  @override
+  Future<void> ackUntrustedWifi() async {}
+
+  @override
+  Future<void> ackTrustRequest() async {}
   bool? enabled;
   List<String> trusted = const [];
   String? ssid;
