@@ -24,11 +24,6 @@ abstract final class AppRoutes {
 
   /// Which apps bypass the tunnel. Its own page because the picker is a list of
   /// every app on the device.
-  /// Which Wi-Fi networks auto-connect leaves alone. Its own screen because an
-  /// empty list means "connect on every network", which is the kind of default
-  /// a user has to be able to find and change.
-  static const trustedNetworksSegment = 'trusted-networks';
-  static const trustedNetworks = '$account/$trustedNetworksSegment';
 
   static const splitTunnelSegment = 'split-tunnel';
   static const splitTunnel = '$account/$splitTunnelSegment';

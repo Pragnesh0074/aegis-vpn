@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
@@ -9,7 +8,6 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../../autoconnect/presentation/auto_connect_controller.dart';
 import '../../killswitch/presentation/ad_block_controller.dart';
 import '../../killswitch/presentation/kill_switch_controller.dart';
 import '../../splittunnel/presentation/split_tunnel_controller.dart';
@@ -129,14 +127,6 @@ class _SplitTunnelTile extends ConsumerWidget {
 class _ConnectionGroup extends ConsumerWidget {
   const _ConnectionGroup();
 
-  Future<void> _autoConnect(BuildContext context, WidgetRef ref, bool enabled) async {
-    try {
-      await ref.read(autoConnectProvider.notifier).setEnabled(enabled: enabled);
-    } catch (error) {
-      if (context.mounted) showMessage(context, describeError(error), isError: true);
-    }
-  }
-
   Future<void> _killSwitch(BuildContext context, WidgetRef ref, bool enabled) async {
     try {
       await ref.read(killSwitchControllerProvider.notifier).setEnabled(enabled: enabled);
@@ -164,7 +154,6 @@ class _ConnectionGroup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final autoConnect = ref.watch(autoConnectProvider).value?.enabled ?? false;
     final reconnect = ref.watch(killSwitchControllerProvider).value ?? false;
     // What the platform actually has armed, which can lag the stored setting.
     final armed = ref.watch(tunnelStatusStreamProvider).value?.killSwitch ?? false;
@@ -172,33 +161,6 @@ class _ConnectionGroup extends ConsumerWidget {
     return SettingsGroup(
       title: 'Connection',
       children: [
-        SettingsTile(
-          label: 'Auto-connect on public Wi-Fi',
-          description: 'Connects when you join a network you have not trusted.',
-          control: Switch(
-            value: autoConnect,
-            onChanged: (v) => _autoConnect(context, ref, v),
-          ),
-          // Shown only when the switch is on, because until then the list
-          // changes nothing. Once it is on, the list IS the behaviour — it
-          // decides which networks are left alone — so naming the networks here
-          // is the difference between a switch a user understands and one they
-          // have to go and investigate.
-          footer: autoConnect
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    _TrustedSummary(),
-                    SizedBox(height: 8),
-                    SettingsNote(
-                      text: 'Works while the app is open. Android will not let an '
-                          'app start a VPN on its own in the background.',
-                    ),
-                  ],
-                )
-              : null,
-        ),
-        const _TrustedNetworksTile(),
         SettingsTile(
           label: 'Reconnect if it drops',
           description: 'Brings the VPN back automatically after a lost connection.',
@@ -226,109 +188,6 @@ class _ConnectionGroup extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The trusted networks, named, under the auto-connect switch.
-///
-/// A count would not do: "2 networks" still leaves the user wondering whether
-/// the one they are standing in is one of them. The current network is marked
-/// for the same reason — recognising it is the whole question being asked.
-class _TrustedSummary extends ConsumerWidget {
-  const _TrustedSummary();
-
-  /// Enough to recognise the list at a glance without turning a settings row
-  /// into a screen. The rest are a tap away.
-  static const _maxShown = 4;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final trusted = ref.watch(autoConnectProvider).value?.trusted ?? const <String>[];
-    final current = ref.watch(currentWifiProvider).value?.ssid;
-
-    if (trusted.isEmpty) {
-      return Text(
-        'No trusted networks yet — Aegis connects on every Wi-Fi, including '
-        'your own.',
-        style: TextStyle(fontSize: 11.5.sp, color: AppColors.warn, height: 1.35),
-      );
-    }
-
-    final shown = trusted.take(_maxShown).toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'LEFT ALONE',
-          style: TextStyle(
-            fontSize: 9.5.sp,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1,
-            color: AppColors.textMuted,
-          ),
-        ),
-        SizedBox(height: 5.h),
-        for (final ssid in shown)
-          Padding(
-            padding: EdgeInsets.only(bottom: 3.h),
-            child: Row(
-              children: [
-                Icon(Icons.wifi, size: 13.r, color: AppColors.textMuted),
-                SizedBox(width: 6.w),
-                Flexible(
-                  child: Text(
-                    ssid,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12.sp, color: AppColors.textHigh),
-                  ),
-                ),
-                if (ssid == current) ...[
-                  SizedBox(width: 6.w),
-                  Text(
-                    "you're on this",
-                    style: TextStyle(fontSize: 10.5.sp, color: AppColors.accent),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        if (trusted.length > shown.length)
-          Text(
-            '+${trusted.length - shown.length} more',
-            style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted),
-          ),
-        // The network the user is standing in is untrusted and the switch is on,
-        // so the tunnel is up because of it. Saying so beats them wondering.
-        if (current != null && !trusted.contains(current)) ...[
-          SizedBox(height: 5.h),
-          Text(
-            '$current is not trusted — Aegis connects here.',
-            style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-/// Reachable whether or not auto-connect is on, because the list is the thing
-/// that decides what "untrusted" means — and with it empty, auto-connect fires
-/// on every network including the user's own.
-class _TrustedNetworksTile extends ConsumerWidget {
-  const _TrustedNetworksTile();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final trusted = ref.watch(autoConnectProvider).value?.trusted ?? const <String>[];
-    return SettingsTile(
-      label: 'Trusted networks',
-      description: trusted.isEmpty
-          ? 'None — auto-connect treats every Wi-Fi as untrusted.'
-          : '${trusted.length} network${trusted.length == 1 ? '' : 's'} '
-              'auto-connect leaves alone.',
-      onTap: () => context.go(AppRoutes.trustedNetworks),
     );
   }
 }

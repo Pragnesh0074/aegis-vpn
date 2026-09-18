@@ -44,8 +44,8 @@ history, quick-settings tile, node health + failover)
 | D1 | `Device.lastSeenAt` written from peer handshakes | ✅ done |
 | V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done — card restored when the self-exclusion was reverted |
 | S1 | Split tunnelling (per-app exclusions) | ✅ done |
-| A1 | Auto-connect on untrusted Wi-Fi | ✅ done |
-| A2 | Ask on joining an untrusted network; remember networks joined | ✅ done — app rebuild pending |
+| A1 | ~~Auto-connect on untrusted Wi-Fi~~ | ❌ removed 2026-09-18 |
+| A2 | ~~Ask on joining an untrusted network~~ | ❌ removed 2026-09-18 with A1 |
 | H1 | Session history (on-device) | ✅ done |
 | Q1 | Quick Settings tile | ✅ done |
 | N1 | Node health + failover | ✅ done |
@@ -153,6 +153,8 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-18 | **Wi-Fi protection removed entirely** — auto-connect, trusted networks, the join prompt and its notification | Dropped at the user's call. The feature only ever worked while the app was running, since Android will not let an app start a VPN from a cold start, and its value did not justify what it cost: `ACCESS_FINE_LOCATION` on a privacy VPN, `POST_NOTIFICATIONS`, a permanent network callback, and a trusted-list UI that had already gone missing once in a refactor. All three permissions are gone from the manifest, which is the part worth keeping in mind if it ever comes back — a VPN asking for fine location invites a Play review. The kill switch still covers a tunnel that drops; nothing now brings one up on its own except the user and the Quick Settings tile |
 
 | 2026-09-18 | Trusting a network **disconnects**, it does not only stop connecting next time | "Trust this network" means "I do not need the VPN here". Adding it to the list while leaving the tunnel up honours half of that: it would stop connecting here in future while still carrying this session through a node the user just declined. `disconnect` marks the drop as user-requested, so the kill switch does not rebuild it, and auto-connect will not raise it again because the network is on the list by then. From the "recently joined" list it drops the tunnel only when that network is the one the device is actually on — trusting the office from the sofa must not disconnect you from the café you are sitting in |
 

@@ -49,7 +49,6 @@ class TunnelBridge(
         const val METHOD_CHANNEL = "vpn.aegis/tunnel"
         const val EVENT_CHANNEL = "vpn.aegis/tunnel/status"
         const val VPN_PERMISSION_REQUEST = 0x9E70
-        const val WIFI_PERMISSION_REQUEST = 0x9E71
 
         /**
          * What Android returns for an SSID it will not tell us, which is every
@@ -120,39 +119,6 @@ class TunnelBridge(
         set(value) { TunnelHost.lastConfig = value }
 
     /**
-     * Auto-connect: bring the tunnel up on joining a Wi-Fi network the user has
-     * not marked trusted.
-     *
-     * Registered here rather than in Dart because the network change worth
-     * reacting to usually arrives while the UI is not on screen. What it cannot
-     * do is survive the process being killed — Android will not let an app start
-     * a VPN from a cold start, and this class holds no callback that would wake
-     * it. The screen says so; Android's own always-on VPN is the only thing that
-     * covers that case.
-     */
-    @Volatile
-    private var autoConnect = false
-
-    /** Lower-cased, because an SSID differing only in case is the same network. */
-    private var trustedSsids: Set<String> = emptySet()
-
-    private var networkCallback: ConnectivityManager.NetworkCallback? = null
-
-    /**
-     * The network auto-connect last acted on.
-     *
-     * Auto-connect fires on *arriving* at an untrusted network, not on the tunnel
-     * being down. Without this the user could never disconnect while sitting on
-     * one — every teardown would be undone by the next capability change on the
-     * same Wi-Fi, which is a fight the app would always win and the user would
-     * always lose.
-     */
-    private var lastAutoNetwork: Network? = null
-
-    /** Held while the location permission dialog is up. */
-    private var pendingPermissionResult: MethodChannel.Result? = null
-
-    /**
      * Republishes whatever the tunnel is doing.
      *
      * Presentation only now. Rebuilding a dropped tunnel is [TunnelHost]'s job,
@@ -211,15 +177,6 @@ class TunnelBridge(
             // Split tunnelling: the apps a person can choose to keep off the
             // tunnel. Launcher-visible apps only — see [listApps].
             "listApps" -> result.success(listApps())
-            "setAutoConnect" -> {
-                setAutoConnect(
-                    enabled = call.argument<Boolean>("enabled") == true,
-                    trusted = call.argument<List<String>>("trusted").orEmpty(),
-                )
-                emit()
-                result.success(null)
-            }
-            "currentWifi" -> result.success(currentWifi())
             // Dart has acted on the platform's connect request — a tile tap on a
             // cold start, or auto-connect with no config to re-establish — so the
             // request is spent.
@@ -228,23 +185,7 @@ class TunnelBridge(
                 emit()
                 result.success(null)
             }
-            // Dart has shown the "you joined an untrusted network" prompt, so the
-            // flag is spent. One-shot on purpose: someone who dismissed it should
-            // not be asked again on every status poll.
-            "ackUntrustedWifi" -> {
-                TunnelHost.pendingUntrustedSsid = null
-                UntrustedWifiNotice.dismiss(activity.applicationContext)
-                emit()
-                result.success(null)
-            }
-            // Dart has written the notification's SSID to the trusted list it owns.
-            "ackTrustRequest" -> {
-                TunnelHost.trustRequestedSsid = null
-                emit()
-                result.success(null)
-            }
             "requestAddTile" -> requestAddTile(result)
-            "requestWifiPermission" -> requestWifiPermission(result)
             "openVpnSettings" -> {
                 try {
                     activity.startActivity(
@@ -499,263 +440,6 @@ class TunnelBridge(
         }
     }
 
-    /**
-     * Arms or disarms auto-connect, and replaces the trusted list.
-     *
-     * The trusted list is updated even when the enabled flag has not changed, so
-     * trusting the network you are on takes effect without a round trip through
-     * disabling the feature.
-     */
-    private fun setAutoConnect(enabled: Boolean, trusted: List<String>) {
-        trustedSsids = trusted.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
-        if (enabled == autoConnect) return
-
-        autoConnect = enabled
-        if (enabled) registerNetworkCallback() else unregisterNetworkCallback()
-    }
-
-    private fun registerNetworkCallback() {
-        if (networkCallback != null) return
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                main.post { onWifiAvailable(network) }
-            }
-
-            override fun onLost(network: Network) {
-                // Forgetting the network here is what lets rejoining it later
-                // count as a fresh arrival.
-                main.post { if (network == lastAutoNetwork) lastAutoNetwork = null }
-            }
-        }
-
-        try {
-            connectivity().registerNetworkCallback(
-                NetworkRequest.Builder()
-                    // Wi-Fi only. A VPN transport would match a request with no
-                    // filter, so our own tunnel coming up would look like a new
-                    // network to auto-connect to.
-                    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build(),
-                callback,
-            )
-            networkCallback = callback
-        } catch (e: Exception) {
-            // Registration is capped per app. Failing here leaves the feature
-            // off rather than taking the bridge down with it.
-            networkCallback = null
-        }
-    }
-
-    private fun unregisterNetworkCallback() {
-        val callback = networkCallback ?: return
-        networkCallback = null
-        lastAutoNetwork = null
-        try {
-            connectivity().unregisterNetworkCallback(callback)
-        } catch (e: Exception) {
-            // Already gone; nothing to undo.
-        }
-    }
-
-    /**
-     * Decides whether joining [network] should bring the tunnel up.
-     *
-     * A network whose SSID cannot be read counts as untrusted. That is the safe
-     * direction for a protection feature — connecting on a network the user
-     * trusts is a wasted tunnel, while not connecting on one they do not is the
-     * exposure this exists to prevent — and it is what happens whenever the
-     * location permission is missing, which Android requires before it will name
-     * a Wi-Fi network at all.
-     */
-    private fun onWifiAvailable(network: Network) {
-        if (!autoConnect) return
-        if (network == lastAutoNetwork) return
-        lastAutoNetwork = network
-
-        val ssid = ssidOf(network)
-
-        // Recorded whether trusted or not: the "recently joined" list is how a
-        // user marks a network without waiting to be standing on it, and it only
-        // ever holds networks they actually connected to.
-        if (ssid != null) TunnelHost.lastJoinedSsid = ssid
-
-        if (ssid != null && trustedSsids.contains(ssid.lowercase())) return
-        if (state == Tunnel.State.UP) return
-
-        // Untrusted, and we are about to bring the tunnel up because of it. Offer
-        // the user the other choice — the notification covers the case this
-        // feature is actually for, where the app is nowhere on screen and an
-        // in-app banner would never be seen.
-        if (ssid != null) {
-            TunnelHost.pendingUntrustedSsid = ssid
-            UntrustedWifiNotice.show(activity.applicationContext, ssid)
-        }
-
-        // Arriving somewhere new is a fresh intent to be protected, so an earlier
-        // manual teardown no longer stands in the way.
-        TunnelHost.userRequestedDown = false
-        TunnelHost.cancelReconnect()
-
-        val config = lastConfig
-        if (config == null) {
-            requestAutoConnectFromDart()
-            return
-        }
-
-        worker.execute {
-            try {
-                backend.setState(tunnel, Tunnel.State.UP, config)
-            } catch (e: Exception) {
-                state = Tunnel.State.DOWN
-                // Consent may have lapsed, which needs an activity this class
-                // cannot summon. Dart can at least surface it.
-                main.post {
-                    pollStats()
-                    requestAutoConnectFromDart()
-                }
-            }
-        }
-    }
-
-    /**
-     * Asks Dart to connect, for the cases the platform cannot.
-     *
-     * Published in the status snapshot rather than as its own event: the status
-     * stream is already the one channel the app is guaranteed to be listening to.
-     */
-    private fun requestAutoConnectFromDart() = TunnelHost.requestConnect()
-
-    /**
-     * The notification's "Trust this network" was tapped.
-     *
-     * Published through the status snapshot rather than as its own call, for the
-     * same reason auto-connect requests are: on a cold start Dart is not
-     * listening yet, and a field that persists until it is cannot be missed,
-     * where a one-off invoke would be.
-     */
-    fun trustFromNotification(ssid: String) {
-        TunnelHost.trustRequestedSsid = ssid
-        TunnelHost.pendingUntrustedSsid = null
-        main.post { emit() }
-    }
-
-    /** The current Wi-Fi network's name, for the "trust this network" button. */
-    private fun currentWifi(): Map<String, Any?> {
-        val network = try {
-            connectivity().activeNetwork
-        } catch (e: Exception) {
-            null
-        }
-        return mapOf(
-            "ssid" to (network?.let { ssidOf(it) }),
-            "hasPermission" to hasWifiPermission(),
-        )
-    }
-
-    /**
-     * The SSID of [network], or null when Android will not say.
-     *
-     * Two paths, because the API moved: from Android 10 the name rides on the
-     * network's own capabilities, and before that it came from whatever Wi-Fi the
-     * device happened to be on. Both are gated on a location permission — the
-     * name of a nearby network is treated as location data, which is exactly what
-     * it is.
-     */
-    private fun ssidOf(network: Network): String? {
-        if (!hasWifiPermission()) return null
-
-        return try {
-            val cm = connectivity()
-            val capabilities = cm.getNetworkCapabilities(network) ?: return null
-            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return null
-
-            val raw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                (capabilities.transportInfo as? WifiInfo)?.ssid
-            } else {
-                @Suppress("DEPRECATION")
-                (activity.applicationContext.getSystemService(Context.WIFI_SERVICE)
-                    as? WifiManager)?.connectionInfo?.ssid
-            }
-            normaliseSsid(raw)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    /** Android returns the SSID quoted, and a placeholder when it is withholding it. */
-    private fun normaliseSsid(raw: String?): String? {
-        val value = raw?.trim()?.removeSurrounding("\"") ?: return null
-        if (value.isEmpty() || value == UNKNOWN_SSID) return null
-        return value
-    }
-
-    private fun hasWifiPermission(): Boolean {
-        return activity.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    /**
-     * Asks for the location permission Android requires before naming a network.
-     *
-     * Worth being blunt about in the UI above this: a VPN asking for location
-     * looks alarming, and the reason is entirely Android's — an SSID is treated
-     * as location data because knowing which Wi-Fi you can see places you.
-     */
-    private fun requestWifiPermission(result: MethodChannel.Result) {
-        if (hasWifiPermission()) {
-            result.success(true)
-            return
-        }
-        if (pendingPermissionResult != null) {
-            result.error("permission_pending", "A permission request is already open.", null)
-            return
-        }
-        if (activity.isFinishing || activity.isDestroyed) {
-            result.error(
-                "permission_unavailable",
-                "The app has to be open to ask for this permission.",
-                null,
-            )
-            return
-        }
-
-        pendingPermissionResult = result
-        try {
-            activity.requestPermissions(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                WIFI_PERMISSION_REQUEST,
-            )
-        } catch (e: Exception) {
-            pendingPermissionResult = null
-            result.error("permission_unavailable", "This device refused the request.", null)
-        }
-    }
-
-    /** Forwarded from the activity; returns true when it consumed the result. */
-    fun onRequestPermissionsResult(requestCode: Int, grantResults: IntArray): Boolean {
-        if (requestCode != WIFI_PERMISSION_REQUEST) return false
-
-        val result = pendingPermissionResult
-        pendingPermissionResult = null
-        // Re-read rather than trusting the grant array, which is empty when the
-        // request is cancelled by the system rather than answered.
-        result?.success(hasWifiPermission())
-        emit()
-        return true
-    }
-
-    /**
-     * Asks Android to offer the user the Quick Settings tile.
-     *
-     * Without this a tile exists but is invisible until someone thinks to edit
-     * their shade, which nobody does. The system draws its own prompt — an app
-     * cannot add a tile for itself — and the user can decline.
-     *
-     * Android 13 and up only. Below that the answer is an honest "no", and the
-     * screen says where to add it by hand.
-     */
     private fun requestAddTile(result: MethodChannel.Result) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             result.success(false)
@@ -853,12 +537,7 @@ class TunnelBridge(
             "txBytes" to tx,
             "lastHandshakeEpochSeconds" to handshake / 1000,
             "killSwitch" to killSwitch,
-            "autoConnect" to autoConnect,
             "connectRequestedAt" to TunnelHost.connectRequestedAt,
-            "wifiPermission" to hasWifiPermission(),
-            "joinedSsid" to TunnelHost.lastJoinedSsid,
-            "untrustedSsid" to TunnelHost.pendingUntrustedSsid,
-            "trustRequestedSsid" to TunnelHost.trustRequestedSsid,
         )
     }
 
@@ -884,9 +563,6 @@ class TunnelBridge(
         events.setStreamHandler(null)
         main.removeCallbacks(statsPoll)
         TunnelHost.removeListener(stateListener)
-        // The callback outlives this activity otherwise, and a leaked one keeps
-        // firing against a dead bridge until the process goes.
-        unregisterNetworkCallback()
         // The worker is NOT shut down: it belongs to the process, and the tile
         // still needs it to take a tunnel down after this activity is gone.
     }

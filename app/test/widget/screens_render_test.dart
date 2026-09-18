@@ -8,9 +8,6 @@ import 'package:aegis_vpn/features/history/presentation/session_recorder.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/devices/presentation/device_config_screen.dart';
 import 'package:aegis_vpn/features/home/presentation/connect_screen.dart';
-import 'package:aegis_vpn/features/autoconnect/domain/auto_connect_settings.dart';
-import 'package:aegis_vpn/features/autoconnect/domain/wifi_network.dart';
-import 'package:aegis_vpn/features/autoconnect/presentation/auto_connect_controller.dart';
 import 'package:aegis_vpn/features/profile/domain/user_profile.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_providers.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_screen.dart';
@@ -306,21 +303,6 @@ void main() {
         expect(adBlockSwitch.value, isFalse);
         expect(adBlockSwitch.onChanged, isNotNull);
 
-        await scrollTo(find.text('Auto-connect on public Wi-Fi'));
-        expect(find.text('Auto-connect on public Wi-Fi'), findsOneWidget);
-
-        // Auto-connect fires on every Wi-Fi that is NOT on the trusted list, so
-        // the list has to be reachable or the switch silently means "connect
-        // everywhere, forever". It went missing once when the Protection page was
-        // folded into this one; this is here so it cannot go missing quietly again.
-        await scrollTo(find.text('Trusted networks'));
-        expect(find.text('Trusted networks'), findsOneWidget);
-        expect(
-          find.textContaining('every Wi-Fi as untrusted'),
-          findsOneWidget,
-          reason: 'an empty trusted list has to say what it means',
-        );
-
         await scrollTo(find.text('Reconnect if it drops'));
         expect(find.text('Reconnect if it drops'), findsOneWidget);
 
@@ -499,49 +481,6 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  // Auto-connect's behaviour IS the trusted list, so with the switch on the
-  // networks have to be named where the switch is. A count would still leave the
-  // user wondering whether the one they are standing in is on it.
-  testWidgets('auto-connect names the trusted networks, and the current one',
-      (tester) async {
-    await pumpScreen(
-      tester,
-      const ProfileScreen(),
-      surfaceSize: const Size(430, 932),
-      overrides: [
-        userProfileProvider.overrideWith(
-          (ref) async => UserProfile(
-            id: 'u1',
-            email: 'someone@example.com',
-            createdAt: DateTime.utc(2026),
-            deviceCount: 1,
-            maxDevices: 5,
-            adBlockEnabled: true,
-            adBlockEntitled: true,
-          ),
-        ),
-        autoConnectProvider.overrideWith(_AutoConnectOn.new),
-        currentWifiProvider.overrideWith(
-          (ref) async => const WifiNetwork(ssid: 'Cafe-Guest', hasPermission: true),
-        ),
-      ],
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Home-WiFi'), findsOneWidget);
-    expect(find.text('Office-5G'), findsOneWidget);
-
-    // The network the user is standing in is NOT trusted, so the tunnel is up
-    // because of it. Saying so beats leaving them to work it out.
-    expect(
-      find.text('Cafe-Guest is not trusted — Aegis connects here.'),
-      findsOneWidget,
-      reason: 'the current network has to be placed against the list',
-    );
-
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('login form rejects a malformed email before any request', (tester) async {
     await pumpScreen(tester, const LoginScreen());
 
@@ -702,11 +641,3 @@ final _sessions = [
     region: 'in-mumbai',
   ),
 ];
-
-/// Auto-connect on, with two trusted networks. A notifier rather than a value
-/// override because the provider is a class-based one.
-class _AutoConnectOn extends AutoConnect {
-  @override
-  Future<AutoConnectSettings> build() async =>
-      const AutoConnectSettings(enabled: true, trusted: ['Home-WiFi', 'Office-5G']);
-}

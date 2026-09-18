@@ -151,30 +151,6 @@ object TunnelHost {
     @Volatile
     var userRequestedDown = false
 
-    /**
-     * The last Wi-Fi network joined, and whether auto-connect fired because it
-     * was not trusted.
-     *
-     * Here rather than in the bridge because the join can happen with no activity
-     * on screen — that is the case the feature exists for — and the answer has to
-     * survive until Dart is next listening to ask about it.
-     *
-     * [pendingUntrustedSsid] is one-shot: Dart clears it once it has prompted, so
-     * a user who declined is not asked again every time the status polls.
-     */
-    @Volatile
-    var lastJoinedSsid: String? = null
-
-    @Volatile
-    var pendingUntrustedSsid: String? = null
-
-    /**
-     * An SSID the user asked to trust from the notification, waiting for Dart to
-     * write it to the list it owns. Cleared by Dart once stored.
-     */
-    @Volatile
-    var trustRequestedSsid: String? = null
-
     private var reconnectAttempt = 0
 
     private val reconnect = Runnable { attemptReconnect() }

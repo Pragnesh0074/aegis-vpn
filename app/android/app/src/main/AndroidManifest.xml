@@ -3,19 +3,8 @@
          release build ships without network access unless it is declared here. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
-    <!-- Auto-connect watches for Wi-Fi networks arriving. -->
+    <!-- Read by the tunnel to tell whether there is a usable network at all. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-    <!-- Android treats an SSID as location data, so naming the network you are on
-         needs this. Auto-connect is the only feature that asks for it, and without
-         it every Wi-Fi counts as untrusted — the app still works, it just cannot
-         tell your home network from a café's. -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
-    <!-- Android 13+. Only used to tell the user the tunnel came up because the
-         Wi-Fi they joined is not trusted, and to offer to trust it — the case
-         auto-connect exists for is precisely the one where the app is not on
-         screen to say so itself. Denying it costs the notice, nothing else. -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:label="aegis_vpn"

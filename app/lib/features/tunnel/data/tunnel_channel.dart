@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../autoconnect/domain/wifi_network.dart';
 import '../../devices/domain/device_config.dart';
 import '../../splittunnel/domain/installed_app.dart';
 import '../domain/tunnel_status.dart';
@@ -144,47 +143,8 @@ class TunnelChannel {
     }
   }
 
-  /// Arms or disarms auto-connect, and replaces the trusted network list.
-  ///
-  /// Both go in one call because they are one setting to the platform: the
-  /// trusted list is meaningless without the flag, and a flag armed against a
-  /// stale list would connect on a network the user had just trusted.
-  Future<void> setAutoConnect({
-    required bool enabled,
-    required List<String> trusted,
-  }) async {
-    try {
-      await _methods.invokeMethod<void>('setAutoConnect', {
-        'enabled': enabled,
-        'trusted': trusted,
-      });
-    } on PlatformException catch (e) {
-      throw TunnelException(e.message ?? 'Auto-connect could not be changed.');
-    }
-  }
 
-  /// The Wi-Fi network this device is on, for the "trust this network" button.
-  Future<WifiNetwork> currentWifi() async {
-    try {
-      final raw = await _methods.invokeMapMethod<String, dynamic>('currentWifi');
-      if (raw == null) return WifiNetwork.unknown;
-      return WifiNetwork.fromJson(raw);
-    } on PlatformException {
-      return WifiNetwork.unknown;
-    } on MissingPluginException {
-      return WifiNetwork.unknown;
-    }
-  }
 
-  /// Asks for the location permission Android requires before it will name a
-  /// Wi-Fi network. Returns whether it is granted afterwards.
-  Future<bool> requestWifiPermission() async {
-    try {
-      return await _methods.invokeMethod<bool>('requestWifiPermission') ?? false;
-    } on PlatformException {
-      return false;
-    }
-  }
 
   /// Tells the platform its connect request has been acted on.
   ///
@@ -201,32 +161,7 @@ class TunnelChannel {
     }
   }
 
-  /// Tells the platform the "you joined an untrusted network" prompt has been
-  /// shown, so it stops republishing it on every status poll.
-  ///
-  /// Swallows a missing implementation like the other acks: an older platform
-  /// simply never sets the flag, and failing here would break a status refresh.
-  Future<void> ackUntrustedWifi() async {
-    try {
-      await _methods.invokeMethod<void>('ackUntrustedWifi');
-    } on PlatformException {
-      // Nothing to acknowledge.
-    } on MissingPluginException {
-      // No platform implementation.
-    }
-  }
 
-  /// Tells the platform the notification's SSID has been written to the trusted
-  /// list Dart owns.
-  Future<void> ackTrustRequest() async {
-    try {
-      await _methods.invokeMethod<void>('ackTrustRequest');
-    } on PlatformException {
-      // Nothing to acknowledge.
-    } on MissingPluginException {
-      // No platform implementation.
-    }
-  }
 
   /// Asks Android to offer the user the Quick Settings tile.
   ///

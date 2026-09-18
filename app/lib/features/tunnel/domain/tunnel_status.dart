@@ -59,12 +59,7 @@ class TunnelStatus {
     this.stats = TunnelStats.zero,
     this.error,
     this.killSwitch = false,
-    this.autoConnect = false,
     this.connectRequestedAt,
-    this.hasWifiPermission = false,
-    this.joinedSsid,
-    this.untrustedSsid,
-    this.trustRequestedSsid,
   });
 
   final TunnelState state;
@@ -84,9 +79,6 @@ class TunnelStatus {
   /// preference is a promise rather than a fact.
   final bool killSwitch;
 
-  /// Whether the platform is watching for untrusted Wi-Fi. Same reasoning as
-  /// [killSwitch]: what is armed, not what was asked for.
-  final bool autoConnect;
 
   /// An outstanding request from the platform for the app to connect.
   ///
@@ -101,24 +93,9 @@ class TunnelStatus {
   /// app had to be listening for at that instant would simply be missed.
   final DateTime? connectRequestedAt;
 
-  /// Whether Android will name the Wi-Fi network this device is on. Without it
-  /// auto-connect treats every network as untrusted.
-  final bool hasWifiPermission;
 
-  /// The last Wi-Fi network this device joined, trusted or not. Recorded so the
-  /// user can mark it later without having to be standing on it.
-  final String? joinedSsid;
 
-  /// A network auto-connect brought the tunnel up on because it was not trusted.
-  ///
-  /// Stays set until the app acknowledges it, for the same reason as
-  /// [connectRequestedAt]: the join happens with the app in the background, and
-  /// a signal that had to be caught at that instant would simply be missed.
-  final String? untrustedSsid;
 
-  /// An SSID the user asked to trust from the notification, waiting to be
-  /// written to the list Dart owns.
-  final String? trustRequestedSsid;
 
   static const disconnected = TunnelStatus(state: TunnelState.disconnected);
 
@@ -144,15 +121,10 @@ class TunnelStatus {
       ),
       error: json['error'] as String?,
       killSwitch: json['killSwitch'] as bool? ?? false,
-      autoConnect: json['autoConnect'] as bool? ?? false,
       connectRequestedAt: switch (json['connectRequestedAt']) {
         final num ms when ms > 0 => DateTime.fromMillisecondsSinceEpoch(ms.toInt()),
         _ => null,
       },
-      hasWifiPermission: json['wifiPermission'] as bool? ?? false,
-      joinedSsid: json['joinedSsid'] as String?,
-      untrustedSsid: json['untrustedSsid'] as String?,
-      trustRequestedSsid: json['trustRequestedSsid'] as String?,
     );
   }
 }

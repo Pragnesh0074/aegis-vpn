@@ -1,5 +1,4 @@
 import 'package:aegis_vpn/core/storage/secure_store.dart';
-import 'package:aegis_vpn/features/autoconnect/domain/wifi_network.dart';
 import 'package:aegis_vpn/features/devices/data/device_key_store.dart';
 import 'package:aegis_vpn/features/devices/domain/device.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
@@ -111,11 +110,6 @@ void main() {
 
 /// Records what the platform layer was asked to do.
 class _RecordingChannel implements TunnelChannel {
-  @override
-  Future<void> ackUntrustedWifi() async {}
-
-  @override
-  Future<void> ackTrustRequest() async {}
   List<String>? excluded;
 
   @override
@@ -132,18 +126,6 @@ class _RecordingChannel implements TunnelChannel {
 
   @override
   Future<List<InstalledApp>> listApps() async => const [];
-
-  @override
-  Future<void> setAutoConnect({
-    required bool enabled,
-    required List<String> trusted,
-  }) async {}
-
-  @override
-  Future<WifiNetwork> currentWifi() async => WifiNetwork.unknown;
-
-  @override
-  Future<bool> requestWifiPermission() async => false;
 
   @override
   Future<void> ackConnectRequest() async {}
