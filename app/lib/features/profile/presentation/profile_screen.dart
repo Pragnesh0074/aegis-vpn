@@ -185,6 +185,7 @@ class _ConnectionGroup extends ConsumerWidget {
                 )
               : null,
         ),
+        const _TrustedNetworksTile(),
         SettingsTile(
           label: 'Reconnect if it drops',
           description: 'Brings the VPN back automatically after a lost connection.',
@@ -212,6 +213,26 @@ class _ConnectionGroup extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Reachable whether or not auto-connect is on, because the list is the thing
+/// that decides what "untrusted" means — and with it empty, auto-connect fires
+/// on every network including the user's own.
+class _TrustedNetworksTile extends ConsumerWidget {
+  const _TrustedNetworksTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trusted = ref.watch(autoConnectProvider).value?.trusted ?? const <String>[];
+    return SettingsTile(
+      label: 'Trusted networks',
+      description: trusted.isEmpty
+          ? 'None — auto-connect treats every Wi-Fi as untrusted.'
+          : '${trusted.length} network${trusted.length == 1 ? '' : 's'} '
+              'auto-connect leaves alone.',
+      onTap: () => context.go(AppRoutes.trustedNetworks),
     );
   }
 }

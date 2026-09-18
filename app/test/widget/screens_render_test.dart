@@ -306,6 +306,18 @@ void main() {
         await scrollTo(find.text('Auto-connect on public Wi-Fi'));
         expect(find.text('Auto-connect on public Wi-Fi'), findsOneWidget);
 
+        // Auto-connect fires on every Wi-Fi that is NOT on the trusted list, so
+        // the list has to be reachable or the switch silently means "connect
+        // everywhere, forever". It went missing once when the Protection page was
+        // folded into this one; this is here so it cannot go missing quietly again.
+        await scrollTo(find.text('Trusted networks'));
+        expect(find.text('Trusted networks'), findsOneWidget);
+        expect(
+          find.textContaining('every Wi-Fi as untrusted'),
+          findsOneWidget,
+          reason: 'an empty trusted list has to say what it means',
+        );
+
         await scrollTo(find.text('Reconnect if it drops'));
         expect(find.text('Reconnect if it drops'), findsOneWidget);
 

@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
+import '../../autoconnect/presentation/trusted_networks_screen.dart';
 import '../../history/presentation/history_screen.dart';
 import '../../nodes/presentation/locations_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
@@ -40,6 +41,10 @@ List<RouteBase> buildHomeRoutes() {
               // which is what makes revoking a device feel like a detour rather
               // than leaving the app.
               routes: [
+                GoRoute(
+                  path: AppRoutes.trustedNetworksSegment,
+                  builder: (_, _) => const TrustedNetworksScreen(),
+                ),
                 GoRoute(
                   path: AppRoutes.splitTunnelSegment,
                   builder: (_, _) => const SplitTunnelScreen(),
