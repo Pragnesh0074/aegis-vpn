@@ -1,4 +1,6 @@
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional } from 'class-validator';
+
+import { PLANS, type SubscriptionPlan } from '../entitlement';
 
 /**
  * Partial update of the account's own settings.
@@ -16,4 +18,15 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsBoolean()
   adBlockEnabled?: boolean;
+}
+
+/** Which plan a (dummy) checkout is for. */
+export class SubscribeDto {
+  /**
+   * Defaults to monthly so an older client that sends no body still works, and
+   * gets the smaller grant rather than the larger one.
+   */
+  @IsOptional()
+  @IsIn(PLANS)
+  plan?: SubscriptionPlan;
 }

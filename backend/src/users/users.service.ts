@@ -8,6 +8,7 @@ import {
   isInTrial,
   isSubscribed,
   trialEndsAt,
+  type SubscriptionPlan,
 } from './entitlement';
 
 export interface UserProfile {
@@ -104,7 +105,10 @@ export class UsersService {
    * webhook from the provider and NOT by the client saying it paid — as written,
    * any authenticated caller can grant themselves a month.
    */
-  async startDummySubscription(userId: string): Promise<UserProfile> {
+  async startDummySubscription(
+    userId: string,
+    plan: SubscriptionPlan = 'monthly',
+  ): Promise<UserProfile> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { createdAt: true, subscribedUntil: true },
@@ -113,7 +117,7 @@ export class UsersService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { subscribedUntil: extendSubscription(user) },
+      data: { subscribedUntil: extendSubscription(user, plan) },
     });
     return this.getProfile(userId);
   }

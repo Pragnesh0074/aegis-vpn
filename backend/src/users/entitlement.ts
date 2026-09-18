@@ -9,8 +9,22 @@ import type { User } from '@prisma/client';
  */
 export const TRIAL_DURATION_MS = 24 * 60 * 60 * 1000;
 
-/** What a dummy checkout buys. Replace when a real payment provider lands. */
-export const SUBSCRIPTION_DURATION_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * What each plan buys.
+ *
+ * The checkout is a dummy, but the plan still has to mean something: a paywall
+ * that offers a year and writes a month is worse than one that offers nothing,
+ * because the disagreement only surfaces in the database.
+ */
+export const PLANS = ['monthly', 'yearly'] as const;
+export type SubscriptionPlan = (typeof PLANS)[number];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export const PLAN_DURATION_MS: Record<SubscriptionPlan, number> = {
+  monthly: 30 * DAY_MS,
+  yearly: 365 * DAY_MS,
+};
 
 /** The parts of a user entitlement depends on. */
 export type EntitlementSubject = Pick<User, 'createdAt' | 'subscribedUntil'>;
@@ -52,15 +66,16 @@ export function accessRemainingMs(
 }
 
 /**
- * The new expiry after a dummy checkout.
+ * The new expiry after a checkout of [plan].
  *
  * Extends from whichever is later — now, or an existing subscription — so
  * renewing early adds time rather than discarding what is left.
  */
 export function extendSubscription(
   user: EntitlementSubject,
+  plan: SubscriptionPlan = 'monthly',
   now: Date = new Date(),
 ): Date {
   const from = Math.max(now.getTime(), user.subscribedUntil?.getTime() ?? 0);
-  return new Date(from + SUBSCRIPTION_DURATION_MS);
+  return new Date(from + PLAN_DURATION_MS[plan]);
 }

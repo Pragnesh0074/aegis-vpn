@@ -32,7 +32,7 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
       // The pause is theatre, not work: a checkout that returns instantly reads
       // as "nothing happened". The real one will be slower than this.
       await Future<void>.delayed(const Duration(milliseconds: 900));
-      await ref.read(profileRepositoryProvider).subscribe();
+      await ref.read(profileRepositoryProvider).subscribe(_selected.id);
       ref.invalidate(userProfileProvider);
       if (!mounted) return;
       showMessage(context, 'Subscribed. Everything is unlocked.');
@@ -129,13 +129,17 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
   }
 }
 
-/// Placeholder pricing. Every plan runs the same dummy checkout and grants the
-/// same 30 days — the choice exists to shape the screen, not to mean anything.
+/// Placeholder pricing, but the plan is real: it is sent to the API, which grants
+/// 30 days or 365 accordingly. A paywall that offers a year and quietly writes a
+/// month only reveals the disagreement in the database.
 enum _Plan {
-  monthly('Monthly', '₹149 / month', 'Billed every month. Cancel any time.'),
-  yearly('Yearly', '₹1,199 / year', 'Two months free compared with monthly.');
+  monthly('monthly', 'Monthly', '₹149 / month', 'Billed every month. Cancel any time.'),
+  yearly('yearly', 'Yearly', '₹1,199 / year', 'Two months free compared with monthly.');
 
-  const _Plan(this.label, this.price, this.blurb);
+  const _Plan(this.id, this.label, this.price, this.blurb);
+
+  /// Sent to the API, which decides the duration. The names must match `PLANS`.
+  final String id;
 
   final String label;
   final String price;

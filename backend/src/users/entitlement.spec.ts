@@ -1,5 +1,5 @@
 import {
-  SUBSCRIPTION_DURATION_MS,
+  PLAN_DURATION_MS,
   TRIAL_DURATION_MS,
   accessRemainingMs,
   extendSubscription,
@@ -67,14 +67,27 @@ describe('accessRemainingMs', () => {
 
 describe('extendSubscription', () => {
   it('gives a full period to someone with none', () => {
-    const until = extendSubscription(fresh, hoursAfter(30));
-    expect(until.getTime() - hoursAfter(30).getTime()).toBe(SUBSCRIPTION_DURATION_MS);
+    const until = extendSubscription(fresh, 'monthly', hoursAfter(30));
+    expect(until.getTime() - hoursAfter(30).getTime()).toBe(PLAN_DURATION_MS.monthly);
+  });
+
+  // The paywall offers a year. If the server writes a month regardless, the two
+  // only disagree in the database — which is where nobody looks.
+  it('honours the plan it was sold', () => {
+    const until = extendSubscription(fresh, 'yearly', hoursAfter(30));
+    expect(until.getTime() - hoursAfter(30).getTime()).toBe(PLAN_DURATION_MS.yearly);
+    expect(PLAN_DURATION_MS.yearly).toBeGreaterThan(PLAN_DURATION_MS.monthly);
+  });
+
+  it('defaults to the smaller grant when no plan is given', () => {
+    const until = extendSubscription(fresh, undefined, hoursAfter(30));
+    expect(until.getTime() - hoursAfter(30).getTime()).toBe(PLAN_DURATION_MS.monthly);
   });
 
   // Renewing early must add to what is left rather than throw it away.
   it('stacks on time still remaining', () => {
     const active = { createdAt: CREATED, subscribedUntil: hoursAfter(100) };
-    const until = extendSubscription(active, hoursAfter(30));
-    expect(until.getTime()).toBe(hoursAfter(100).getTime() + SUBSCRIPTION_DURATION_MS);
+    const until = extendSubscription(active, 'monthly', hoursAfter(30));
+    expect(until.getTime()).toBe(hoursAfter(100).getTime() + PLAN_DURATION_MS.monthly);
   });
 });

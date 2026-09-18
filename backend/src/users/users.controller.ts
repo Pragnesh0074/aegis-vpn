@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Patch, Post } from
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { UsersService, type UserProfile } from './users.service';
-import { UpdateSettingsDto } from './dto/update-settings.dto';
+import { SubscribeDto, UpdateSettingsDto } from './dto/update-settings.dto';
 
 @Controller('users')
 export class UsersController {
@@ -43,8 +43,11 @@ export class UsersController {
    */
   @Post('me/subscription')
   @HttpCode(HttpStatus.OK)
-  subscribe(@CurrentUser() user: AuthenticatedUser): Promise<UserProfile> {
-    return this.users.startDummySubscription(user.userId);
+  subscribe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SubscribeDto,
+  ): Promise<UserProfile> {
+    return this.users.startDummySubscription(user.userId, dto.plan ?? 'monthly');
   }
 
   /** Clears the dummy subscription, so the paywall can be tested more than once. */
