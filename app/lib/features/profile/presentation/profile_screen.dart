@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
@@ -178,10 +179,22 @@ class _ConnectionGroup extends ConsumerWidget {
             value: autoConnect,
             onChanged: (v) => _autoConnect(context, ref, v),
           ),
+          // Shown only when the switch is on, because until then the list
+          // changes nothing. Once it is on, the list IS the behaviour — it
+          // decides which networks are left alone — so naming the networks here
+          // is the difference between a switch a user understands and one they
+          // have to go and investigate.
           footer: autoConnect
-              ? const SettingsNote(
-                  text: 'Works while the app is open. Android will not let an app '
-                      'start a VPN on its own in the background.',
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    _TrustedSummary(),
+                    SizedBox(height: 8),
+                    SettingsNote(
+                      text: 'Works while the app is open. Android will not let an '
+                          'app start a VPN on its own in the background.',
+                    ),
+                  ],
                 )
               : null,
         ),
@@ -212,6 +225,89 @@ class _ConnectionGroup extends ConsumerWidget {
             child: const Text('Add'),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The trusted networks, named, under the auto-connect switch.
+///
+/// A count would not do: "2 networks" still leaves the user wondering whether
+/// the one they are standing in is one of them. The current network is marked
+/// for the same reason — recognising it is the whole question being asked.
+class _TrustedSummary extends ConsumerWidget {
+  const _TrustedSummary();
+
+  /// Enough to recognise the list at a glance without turning a settings row
+  /// into a screen. The rest are a tap away.
+  static const _maxShown = 4;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trusted = ref.watch(autoConnectProvider).value?.trusted ?? const <String>[];
+    final current = ref.watch(currentWifiProvider).value?.ssid;
+
+    if (trusted.isEmpty) {
+      return Text(
+        'No trusted networks yet — Aegis connects on every Wi-Fi, including '
+        'your own.',
+        style: TextStyle(fontSize: 11.5.sp, color: AppColors.warn, height: 1.35),
+      );
+    }
+
+    final shown = trusted.take(_maxShown).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'LEFT ALONE',
+          style: TextStyle(
+            fontSize: 9.5.sp,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: AppColors.textMuted,
+          ),
+        ),
+        SizedBox(height: 5.h),
+        for (final ssid in shown)
+          Padding(
+            padding: EdgeInsets.only(bottom: 3.h),
+            child: Row(
+              children: [
+                Icon(Icons.wifi, size: 13.r, color: AppColors.textMuted),
+                SizedBox(width: 6.w),
+                Flexible(
+                  child: Text(
+                    ssid,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12.sp, color: AppColors.textHigh),
+                  ),
+                ),
+                if (ssid == current) ...[
+                  SizedBox(width: 6.w),
+                  Text(
+                    "you're on this",
+                    style: TextStyle(fontSize: 10.5.sp, color: AppColors.accent),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        if (trusted.length > shown.length)
+          Text(
+            '+${trusted.length - shown.length} more',
+            style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted),
+          ),
+        // The network the user is standing in is untrusted and the switch is on,
+        // so the tunnel is up because of it. Saying so beats them wondering.
+        if (current != null && !trusted.contains(current)) ...[
+          SizedBox(height: 5.h),
+          Text(
+            '$current is not trusted — Aegis connects here.',
+            style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted),
+          ),
+        ],
       ],
     );
   }
