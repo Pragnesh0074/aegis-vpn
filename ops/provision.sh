@@ -375,9 +375,28 @@ bootstrapDns:
 blocking:
   denylists:
     ads:
+      # StevenBlack is web-first: it covers browser ads well and misses a lot of
+      # the SDKs that serve ads INSIDE apps. oisd and HaGeZi are the ones that
+      # catch AppLovin, Unity, ironSource, Vungle and friends — without them the
+      # switch blocks ads on the web and quietly does nothing in half the apps a
+      # user opens. Both are curated for low false positives; the allowlist is
+      # there for when they are wrong anyway.
       - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+      - https://big.oisd.nl
+      - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/pro.txt
       - https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
       - https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+      # In-app ad hosts the curated lists above miss. Verified missing by query,
+      # not guessed — keep this short, and prefer getting an entry upstream.
+      #
+      # NOT here on purpose: imasdk.googleapis.com. It is Google's video-ad
+      # framework, and players commonly refuse to start the CONTENT when it
+      # cannot load, so blocking it costs the user the video rather than the ad.
+      # That is why the curated lists leave it alone too.
+      - |
+        ads.applovin.com
+        rt.applovin.com
+        prod-a.applovin.com
   allowlists:
     ads:
       - /etc/blocky/allowlist.txt
