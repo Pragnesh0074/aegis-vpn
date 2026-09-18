@@ -68,7 +68,7 @@ export const envSchema = z
     SEED_NODE_ENDPOINT: z.string().default(''),
     SEED_NODE_SUBNET_V4: z.string().default('10.7.0.0/24'),
     SEED_NODE_DNS: z.string().default('10.7.0.1'),
-    SEED_NODE_MTU: z.coerce.number().int().min(1280).max(1500).default(1420),
+    SEED_NODE_MTU: z.coerce.number().int().min(1280).max(1500).default(1280),
   })
   .superRefine((env, ctx) => {
     if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {

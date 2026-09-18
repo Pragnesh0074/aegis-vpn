@@ -37,7 +37,12 @@ TUNNEL_SERVER_IP6="${TUNNEL_SERVER_IP6:-fd42:7::1}"
 NODE_ROLE="${NODE_ROLE:-control}"
 
 WG_PORT="51820"
-WG_MTU="1420"          # Internet path MTU is 1500 on AWS and OCI alike (GCP needs less)
+# 1280, not 1420. A 1420 tunnel puts ~1438 bytes on the wire once WireGuard has
+# encapsulated a full-size inner packet, and mobile carriers routinely cannot
+# carry that — the symptom is nasty because it is size-dependent: small replies
+# arrive, a ~1.3 KB one vanishes and the server sits there retransmitting to a
+# client that never ACKs. 1280 is the IPv6 minimum and is carried everywhere.
+WG_MTU="1280"
 WG_IF="wg0"
 DB_NAME="aegis"
 DB_USER="aegis"

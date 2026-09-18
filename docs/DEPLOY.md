@@ -326,7 +326,7 @@ sudo journalctl -u aegis-api -n 20 | grep Reconciled
 | Tunnel never handshakes | **AWS:** Security Group missing UDP 51820. **Oracle:** host iptables — check `sudo iptables -L INPUT -n --line-numbers` for the UDP 51820 ACCEPT, plus the VCN Security List rule. |
 | Handshake succeeds, then nothing at all | **AWS: the source/destination check is still enabled.** This is the classic one. Also check `net.ipv4.ip_forward` and the nftables NIC name. |
 | Handshake works, no internet | `net.ipv4.ip_forward`, or the nftables NIC name. `ip -4 route show default` must match the `iifname`/`oifname` in `/etc/nftables.d/aegis-vpn.nft`. |
-| Pings fine, large transfers hang | MTU. Try 1280. |
+| Pings fine, large transfers hang | MTU, and it is size-dependent so it looks like an app bug: small replies arrive, a ~1.3 KB one vanishes and the server retransmits to a client that never ACKs. A 1420 tunnel puts ~1438 bytes on the wire after encapsulation, which mobile carriers often will not carry. Default is now 1280. |
 | DNS resolves nothing in-tunnel | `systemctl status blocky` first — Blocky owns `10.7.0.1:53` now, Unbound only listens on `127.0.0.1:5335`. Test the two halves separately: `dig @10.7.0.1 example.com` and `dig @127.0.0.1 -p 5335 example.com`. |
 | Blocky won't start: address not available | `freeBind: true` is missing from `ports:` in `/etc/blocky/config.yml`. `10.7.0.1` does not exist until wg0 is up, and Blocky starts first. |
 | Blocky won't start: address in use | Unbound is still on `10.7.0.1:53` from the pre-Blocky config. Re-run `provision.sh`, which moves it, or check `ss -ulpn | grep :53`. |

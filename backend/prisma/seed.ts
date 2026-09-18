@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   const endpoint = required('SEED_NODE_ENDPOINT');
   const subnetV4 = process.env.SEED_NODE_SUBNET_V4?.trim() || '10.7.0.0/24';
   const dns = process.env.SEED_NODE_DNS?.trim() || '10.7.0.1';
-  const mtu = Number(process.env.SEED_NODE_MTU ?? 1420);
+  const mtu = Number(process.env.SEED_NODE_MTU ?? 1280);
 
   if (!WG_PUBLIC_KEY.test(publicKey)) {
     throw new Error(

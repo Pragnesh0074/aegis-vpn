@@ -55,7 +55,7 @@ Happens once per device, over HTTPS.
                                                   (WireguardService -> ExecWgRunner)
 
 4. API ──> Phone:
-     { tunnelIp: "10.7.0.2/32", dns: "10.7.0.1", mtu: 1420,
+     { tunnelIp: "10.7.0.2/32", dns: "10.7.0.1", mtu: 1280,
        peer: { publicKey: <SERVER's public key>,
                endpoint: "vpn.example.com:51820",
                allowedIps: "0.0.0.0/0, ::/0",

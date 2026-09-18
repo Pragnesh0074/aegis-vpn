@@ -350,7 +350,7 @@ CONFIG="[Interface]
 PrivateKey = $PRIV
 Address = $TUNNEL_IP
 DNS = 1.1.1.1
-MTU = 1420
+MTU = 1280
 
 [Peer]
 PublicKey = $SERVER_PUB
