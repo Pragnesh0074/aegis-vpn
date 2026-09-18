@@ -44,6 +44,7 @@ interface HarnessOptions {
   taken?: string[];
   hasCapacity?: boolean;
   adBlockEnabled?: boolean;
+  createdAt?: Date;
 }
 
 function harness(options: HarnessOptions) {
@@ -80,7 +81,13 @@ function harness(options: HarnessOptions) {
 
   const users = {
     hasDeviceCapacity: async () => options.hasCapacity ?? true,
-    adBlockSubject: async () => ({ adBlockEnabled: options.adBlockEnabled ?? true }),
+    adBlockSubject: async () => ({
+      adBlockEnabled: options.adBlockEnabled ?? true,
+      // Created now, so inside the 24h trial: these tests are about issuing a
+      // peer, not about who is entitled.
+      createdAt: options.createdAt ?? new Date(),
+      subscribedUntil: null,
+    }),
   } as unknown as UsersService;
 
   const nodes = {

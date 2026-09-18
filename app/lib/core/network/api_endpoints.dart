@@ -12,6 +12,7 @@ abstract final class ApiEndpoints {
   // users.controller.ts
   static const me = '/users/me';
   static const meSettings = '/users/me/settings';
+  static const meSubscription = '/users/me/subscription';
 
   // nodes.controller.ts
   static const nodes = '/nodes';

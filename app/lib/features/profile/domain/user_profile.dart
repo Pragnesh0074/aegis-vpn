@@ -8,6 +8,7 @@ class UserProfile {
     required this.maxDevices,
     required this.adBlockEnabled,
     required this.adBlockEntitled,
+    required this.access,
   });
 
   final String id;
@@ -31,6 +32,9 @@ class UserProfile {
   /// *why* the switch is off rather than just showing it off.
   final bool adBlockEntitled;
 
+  /// Paid access, and on what basis. The one place the UI asks "may they?".
+  final AccessState access;
+
   /// What is actually in force. [adBlockEnabled] alone would lie to a user whose
   /// plan does not include it.
   bool get adBlockActive => adBlockEnabled && adBlockEntitled;
@@ -45,9 +49,57 @@ class UserProfile {
       // Defaulted so an older server that does not send them still parses.
       adBlockEnabled: json['adBlockEnabled'] as bool? ?? true,
       adBlockEntitled: json['adBlockEntitled'] as bool? ?? true,
+      access: AccessState.fromJson(json['access'] as Map<String, dynamic>?),
     );
   }
 
   bool get hasDeviceCapacity => deviceCount < maxDevices;
   int get remainingDevices => (maxDevices - deviceCount).clamp(0, maxDevices);
+}
+
+/// Mirrors `AccessState` on the API.
+///
+/// Every account gets 24 hours from sign-up, then needs a subscription. The
+/// server decides — the client never does the date arithmetic itself, because a
+/// device clock is not something entitlement should depend on.
+class AccessState {
+  const AccessState({
+    required this.entitled,
+    required this.onTrial,
+    required this.subscribed,
+    required this.remaining,
+  });
+
+  /// True when the paid features are available right now.
+  final bool entitled;
+
+  /// True when that is the free trial rather than a subscription.
+  final bool onTrial;
+  final bool subscribed;
+
+  /// How long that access lasts. [Duration.zero] once it has lapsed.
+  final Duration remaining;
+
+  /// An older server that does not send this is treated as entitled. Failing
+  /// open is right here: locking someone out of what they paid for because a
+  /// field was missing is worse than a day of free access.
+  factory AccessState.fromJson(Map<String, dynamic>? json) {
+    if (json == null) {
+      return const AccessState(
+        entitled: true,
+        onTrial: false,
+        subscribed: false,
+        remaining: Duration.zero,
+      );
+    }
+    return AccessState(
+      entitled: json['entitled'] as bool? ?? true,
+      onTrial: json['onTrial'] as bool? ?? false,
+      subscribed: json['subscribed'] as bool? ?? false,
+      remaining: Duration(milliseconds: (json['remainingMs'] as num?)?.toInt() ?? 0),
+    );
+  }
+
+  /// Rounded up, because "0 hours left" reads as expired when it is not.
+  int get hoursLeft => remaining.inMinutes <= 0 ? 0 : (remaining.inMinutes / 60).ceil();
 }

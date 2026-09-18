@@ -22,6 +22,15 @@ model User {
   /// which is where a paid plan will be enforced.
   adBlockEnabled Boolean @default(true)
 
+  /// When the current subscription lapses. Null means never subscribed.
+  ///
+  /// Entitlement is this OR the 24h trial derived from `createdAt`, so there is
+  /// no separate "is on trial" column to fall out of step with the clock.
+  ///
+  /// Written today by a DUMMY checkout that takes no money. A real provider
+  /// would set it from a verified webhook, never from the client's word.
+  subscribedUntil DateTime?
+
   devices       Device[]
   refreshTokens RefreshToken[]
 

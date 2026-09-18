@@ -44,6 +44,7 @@ history, quick-settings tile, node health + failover)
 | D1 | `Device.lastSeenAt` written from peer handshakes | ✅ done |
 | V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done — card restored when the self-exclusion was reverted |
 | S1 | Split tunnelling (per-app exclusions) | ✅ done |
+| P1 | 24h trial, then paywall — DUMMY checkout, no payments | ✅ built — deploy + app rebuild pending |
 | A1 | ~~Auto-connect on untrusted Wi-Fi~~ | ❌ removed 2026-09-18 |
 | A2 | ~~Ask on joining an untrusted network~~ | ❌ removed 2026-09-18 with A1 |
 | H1 | Session history (on-device) | ✅ done |
@@ -153,6 +154,10 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-18 | The trial is derived from `users.createdAt`, with no "trial started" column | A second column would be a second source of truth for something the row already answers, and anchoring to a client-reported first launch would let the client restart its own trial. The cost is that an account which sits unopened for a week has still spent its trial — correct, and the simpler rule |
+| 2026-09-18 | Only ad blocking is enforced server-side; the kill switch and split tunnelling are gated in the UI | Ad blocking is a resolver ADDRESS the API chooses, so a modified client cannot grant itself filtering. The other two are device features the platform performs locally — the server has no say, and their lock is honest-user-only. Fine while the checkout is a dummy; worth knowing before real money, because the two tiers of enforcement are genuinely different |
+| 2026-09-18 | `POST /users/me/subscription` grants 30 days to any authenticated caller | Deliberate, and dangerous if forgotten: it exists so the paywall can be walked end to end before a provider is chosen. A real integration must grant access from a signed provider webhook, never from the client saying it paid. Both the endpoint and the paywall screen say so on their face |
 
 | 2026-09-18 | **Wi-Fi protection removed entirely** — auto-connect, trusted networks, the join prompt and its notification | Dropped at the user's call. The feature only ever worked while the app was running, since Android will not let an app start a VPN from a cold start, and its value did not justify what it cost: `ACCESS_FINE_LOCATION` on a privacy VPN, `POST_NOTIFICATIONS`, a permanent network callback, and a trusted-list UI that had already gone missing once in a refactor. All three permissions are gone from the manifest, which is the part worth keeping in mind if it ever comes back — a VPN asking for fine location invites a Play review. The kill switch still covers a tunnel that drops; nothing now brings one up on its own except the user and the Quick Settings tile |
 

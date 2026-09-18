@@ -25,6 +25,11 @@ abstract final class AppRoutes {
   /// Which apps bypass the tunnel. Its own page because the picker is a list of
   /// every app on the device.
 
+  /// The paywall. Under the account tab so it keeps the tab bar and can be
+  /// backed out of — it gates features, it does not trap anyone.
+  static const paywallSegment = 'premium';
+  static const paywall = '$account/$paywallSegment';
+
   static const splitTunnelSegment = 'split-tunnel';
   static const splitTunnel = '$account/$splitTunnelSegment';
 

@@ -259,6 +259,14 @@ void main() {
                 maxDevices: 5,
                 adBlockEnabled: false,
                 adBlockEntitled: true,
+                // On trial, so the paid features are unlocked and the settings
+                // render as switches rather than as locks.
+                access: const AccessState(
+                  entitled: true,
+                  onTrial: true,
+                  subscribed: false,
+                  remaining: Duration(hours: 12),
+                ),
               ),
             ),
           ],
@@ -478,6 +486,51 @@ void main() {
       find.textContaining('not one of our servers'),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  // The three paid features have to READ as locked, not merely refuse to work.
+  // A switch that silently does nothing is the worst version of a paywall.
+  testWidgets('a lapsed account sees the paid settings locked', (tester) async {
+    await pumpScreen(
+      tester,
+      const ProfileScreen(),
+      surfaceSize: const Size(430, 932),
+      overrides: [
+        userProfileProvider.overrideWith(
+          (ref) async => UserProfile(
+            id: 'u1',
+            email: 'someone@example.com',
+            createdAt: DateTime.utc(2026),
+            deviceCount: 1,
+            maxDevices: 5,
+            adBlockEnabled: true,
+            adBlockEntitled: false,
+            access: const AccessState(
+              entitled: false,
+              onTrial: false,
+              subscribed: false,
+              remaining: Duration.zero,
+            ),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trial ended'), findsOneWidget);
+    expect(find.text('Subscribe'), findsOneWidget);
+
+    // Ad blocking is locked even though the stored preference is ON: the switch
+    // records what the user wanted, entitlement decides what they get.
+    expect(find.text('Subscribe to block ads and trackers.'), findsOneWidget);
+    expect(
+      find.byType(Switch),
+      findsNothing,
+      reason: 'a locked feature must not show a switch that does nothing',
+    );
+    expect(find.text('Premium'), findsWidgets);
+
     expect(tester.takeException(), isNull);
   });
 

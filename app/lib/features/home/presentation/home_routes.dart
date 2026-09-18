@@ -4,6 +4,7 @@ import '../../../core/router/app_routes.dart';
 import '../../history/presentation/history_screen.dart';
 import '../../nodes/presentation/locations_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
+import '../../subscription/presentation/paywall_screen.dart';
 import '../../splittunnel/presentation/split_tunnel_screen.dart';
 import 'connect_screen.dart';
 import 'home_shell.dart';
@@ -40,6 +41,10 @@ List<RouteBase> buildHomeRoutes() {
               // which is what makes revoking a device feel like a detour rather
               // than leaving the app.
               routes: [
+                GoRoute(
+                  path: AppRoutes.paywallSegment,
+                  builder: (_, _) => const PaywallScreen(),
+                ),
                 GoRoute(
                   path: AppRoutes.splitTunnelSegment,
                   builder: (_, _) => const SplitTunnelScreen(),

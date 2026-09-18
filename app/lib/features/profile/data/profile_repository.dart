@@ -28,6 +28,21 @@ class ProfileRepository {
     );
     return UserProfile.fromJson(json);
   }
+
+  /// `POST /users/me/subscription` — the DUMMY checkout.
+  ///
+  /// Takes no money and the server verifies nothing. It exists so the paywall
+  /// can be walked end to end before a payment provider is chosen; a real one
+  /// would grant access from a signed webhook, never from this call.
+  Future<UserProfile> subscribe() async {
+    return UserProfile.fromJson(await _api.postJson(ApiEndpoints.meSubscription));
+  }
+
+  /// Clears the dummy subscription, so the paywall can be tested again.
+  Future<UserProfile> cancelSubscription() async {
+    await _api.delete(ApiEndpoints.meSubscription);
+    return fetch();
+  }
 }
 
 @Riverpod(keepAlive: true)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_routes.dart';
@@ -46,6 +47,8 @@ class ProfileScreen extends ConsumerWidget {
             padding: Gap.page,
             children: [
               _IdentityCard(profile: data),
+              Gap.md,
+              _AccessCard(access: data.access),
               Gap.lg,
               const _PrivacyGroup(),
               Gap.lg,
@@ -78,21 +81,28 @@ class _PrivacyGroup extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setting = ref.watch(adBlockControllerProvider);
-    final enabled = setting.value ?? false;
+    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
+    final enabled = (setting.value ?? false) && entitled;
 
     return SettingsGroup(
       title: 'Privacy',
       children: [
         SettingsTile(
           label: 'Ad blocker',
-          description: 'Refuses ad and tracker domains at the server, in the '
-              'browser and inside apps.',
-          control: Switch(
-            value: enabled,
-            // Nothing to toggle until the profile has loaded; moving it early
-            // would write a preference nobody has read.
-            onChanged: setting.isLoading ? null : (v) => _toggle(context, ref, v),
-          ),
+          description: entitled
+              ? 'Refuses ad and tracker domains at the server, in the browser '
+                  'and inside apps.'
+              : 'Subscribe to block ads and trackers.',
+          control: entitled
+              ? Switch(
+                  value: enabled,
+                  // Nothing to toggle until the profile has loaded; moving it
+                  // early would write a preference nobody has read.
+                  onChanged:
+                      setting.isLoading ? null : (v) => _toggle(context, ref, v),
+                )
+              : const _LockedChip(),
+          onTap: entitled ? null : () => context.go(AppRoutes.paywall),
           footer: enabled
               ? const SettingsNote(
                   text: 'Ads inside YouTube, Instagram and TikTok still show — they '
@@ -112,12 +122,111 @@ class _SplitTunnelTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final excluded = ref.watch(excludedAppsProvider).value?.length ?? 0;
+    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
     return SettingsTile(
       label: 'Apps outside the VPN',
-      description: excluded == 0
-          ? 'All apps go through the VPN.'
-          : '$excluded app${excluded == 1 ? '' : 's'} bypass the VPN.',
-      onTap: () => context.go(AppRoutes.splitTunnel),
+      description: !entitled
+          ? 'Subscribe to keep some apps off the VPN.'
+          : excluded == 0
+              ? 'All apps go through the VPN.'
+              : '$excluded app${excluded == 1 ? '' : 's'} bypass the VPN.',
+      control: entitled ? null : const _LockedChip(),
+      onTap: () => context.go(entitled ? AppRoutes.splitTunnel : AppRoutes.paywall),
+    );
+  }
+}
+
+/// Shown in place of a switch on a feature the account cannot currently use.
+class _LockedChip extends StatelessWidget {
+  const _LockedChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.lock_outline, size: 15.r, color: AppColors.textMuted),
+        SizedBox(width: 4.w),
+        Text(
+          'Premium',
+          style: TextStyle(
+            fontSize: 11.5.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Where the account stands: on trial, subscribed, or locked out.
+///
+/// Its own card rather than a line on each setting, because the answer is the
+/// same for all three and repeating it three times would read as three separate
+/// problems.
+class _AccessCard extends StatelessWidget {
+  const _AccessCard({required this.access});
+
+  final AccessState access;
+
+  @override
+  Widget build(BuildContext context) {
+    final (title, body, tint) = switch (access) {
+      AccessState(subscribed: true) => (
+          'Premium active',
+          'Ad blocking, auto-reconnect and split tunnelling are yours.',
+          AppColors.accent,
+        ),
+      AccessState(onTrial: true) => (
+          'Free trial — ${access.hoursLeft}h left',
+          'Everything is unlocked until then. After that the VPN stays free and '
+              'the extras need a subscription.',
+          AppColors.accent,
+        ),
+      _ => (
+          'Trial ended',
+          'The VPN still works. Ad blocking, auto-reconnect and split tunnelling '
+              'need a subscription.',
+          AppColors.warn,
+        ),
+    };
+
+    return Container(
+      padding: EdgeInsets.all(14.r),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18.r),
+        border: Border.all(color: tint),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14.5.sp,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textHigh,
+            ),
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            body,
+            style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+          ),
+          if (!access.subscribed) ...[
+            SizedBox(height: 12.h),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () => context.go(AppRoutes.paywall),
+                child: Text(access.onTrial ? 'See plans' : 'Subscribe'),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -154,7 +263,8 @@ class _ConnectionGroup extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final reconnect = ref.watch(killSwitchControllerProvider).value ?? false;
+    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
+    final reconnect = (ref.watch(killSwitchControllerProvider).value ?? false) && entitled;
     // What the platform actually has armed, which can lag the stored setting.
     final armed = ref.watch(tunnelStatusStreamProvider).value?.killSwitch ?? false;
 
@@ -163,11 +273,16 @@ class _ConnectionGroup extends ConsumerWidget {
       children: [
         SettingsTile(
           label: 'Reconnect if it drops',
-          description: 'Brings the VPN back automatically after a lost connection.',
-          control: Switch(
-            value: reconnect,
-            onChanged: (v) => _killSwitch(context, ref, v),
-          ),
+          description: entitled
+              ? 'Brings the VPN back automatically after a lost connection.'
+              : 'Subscribe to reconnect automatically.',
+          control: entitled
+              ? Switch(
+                  value: reconnect,
+                  onChanged: (v) => _killSwitch(context, ref, v),
+                )
+              : const _LockedChip(),
+          onTap: entitled ? null : () => context.go(AppRoutes.paywall),
           footer: reconnect && !armed
               ? const SettingsNote(
                   text: 'Takes effect once the VPN has run at least once.',
