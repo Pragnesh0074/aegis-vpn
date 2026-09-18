@@ -12,7 +12,6 @@ abstract final class ApiEndpoints {
   // users.controller.ts
   static const me = '/users/me';
   static const meSettings = '/users/me/settings';
-  static const meAdBlockGrant = '/users/me/ad-block/grant';
 
   // nodes.controller.ts
   static const nodes = '/nodes';

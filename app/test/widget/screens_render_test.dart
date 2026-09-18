@@ -178,12 +178,9 @@ void main() {
         expect(find.text('India'), findsOneWidget);
         expect(find.text('AUTO'), findsOneWidget);
 
-        // The exit check is deliberately NOT here. This app is excluded from the
-        // tunnel so AdMob will serve the ad that pays for ad blocking, which
-        // means the API always sees the phone's own address — the card would
-        // cry leak on every healthy connection. Its own tests below still pin
-        // the widget's behaviour for when a server-attested version returns.
-        expect(find.byType(ExitCheckCard), findsNothing);
+        // The one claim on this screen the device does not make about itself.
+        expect(find.text('You appear as 49.36.180.22'), findsOneWidget);
+        expect(find.textContaining('Your real address'), findsOneWidget);
 
         expect(tester.takeException(), isNull);
       });
@@ -260,10 +257,8 @@ void main() {
                 createdAt: DateTime.utc(2026),
                 deviceCount: 1,
                 maxDevices: 5,
-                adBlockEnabled: true,
-                // No grant, so filtering is not actually in force.
-                adBlockEntitled: false,
-                adBlockRemaining: Duration.zero,
+                adBlockEnabled: false,
+                adBlockEntitled: true,
               ),
             ),
           ],
@@ -293,9 +288,9 @@ void main() {
         // from here, under a name someone would actually search for.
         expect(find.text('Ad blocker'), findsOneWidget);
 
-        // Filtering is rented, so with no grant there is nothing to switch and
-        // the ad is the only way forward. A switch that springs back would be
-        // worse than one that will not move.
+        // Off in this fixture, and freely switchable: entitlement is no longer
+        // rented from an ad, so the only thing that can hold the switch still is
+        // a profile that has not loaded.
         final adBlockSwitch = tester.widget<Switch>(
           find.descendant(
             of: find.ancestor(
@@ -306,20 +301,7 @@ void main() {
           ),
         );
         expect(adBlockSwitch.value, isFalse);
-        expect(
-          adBlockSwitch.onChanged,
-          isNull,
-          reason: 'nothing to toggle until an ad has bought some time',
-        );
-        expect(find.text('Watch ad'), findsOneWidget);
-
-        // The caveat that stops the switch promising what DNS cannot do. Short
-        // now, but dropping it would make the setting misleading.
-        expect(
-          find.textContaining('Ads inside YouTube'),
-          findsOneWidget,
-          reason: 'the limit of DNS filtering has to stay on the setting',
-        );
+        expect(adBlockSwitch.onChanged, isNotNull);
 
         await scrollTo(find.text('Auto-connect on public Wi-Fi'));
         expect(find.text('Auto-connect on public Wi-Fi'), findsOneWidget);

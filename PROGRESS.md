@@ -42,7 +42,7 @@ history, quick-settings tile, node health + failover)
 | M3 | What "automatic" means across countries | ✅ done |
 | K1 | Kill switch (auto-reconnect + system lockdown guidance) | ✅ done |
 | D1 | `Device.lastSeenAt` written from peer handshakes | ✅ done |
-| V1 | Exit verification (`GET /whoami` + connect-screen check) | 🟡 reopened — card removed, needs a server-attested replacement |
+| V1 | Exit verification (`GET /whoami` + connect-screen check) | ✅ done — card restored when the self-exclusion was reverted |
 | S1 | Split tunnelling (per-app exclusions) | ✅ done |
 | A1 | Auto-connect on untrusted Wi-Fi | ✅ done |
 | H1 | Session history (on-device) | ✅ done |
@@ -50,7 +50,7 @@ history, quick-settings tile, node health + failover)
 | N1 | Node health + failover | ✅ done |
 | B1 | Ad/tracker blocking (Blocky in front of Unbound, node-side) | ✅ done — live on Mumbai |
 | B2 | Per-user ad-blocking switch (settings toggle, paid-plan seam) | ✅ done — live on Mumbai |
-| B3 | Rewarded ad buys 5 min of ad blocking (AdMob, test ids) | ✅ done — backend live, app rebuild pending |
+| B3 | ~~Rewarded ad buys 5 min of ad blocking~~ | ❌ removed 2026-09-18 — see decisions log |
 | U1 | Protection page folded into Account, plain-language settings | ✅ built — app rebuild pending |
 
 Legend: ⬜ not started · 🟡 in progress · ✅ done
@@ -152,6 +152,9 @@ To continue, say: `Read PROGRESS.md and finish M2.`
 ## Decisions log
 
 Append here as decisions are made, so a later session does not re-litigate them.
+
+| 2026-09-18 | **The rewarded-ad experiment is removed**, and with it the self-exclusion and the AdMob allowlist | It never worked through the tunnel. Three real bugs were found and fixed along the way — AAAA blackholing, the app's routing, a sinkholed ad host — and after each one it still failed. The last state was the honest one: the app was excluded, no ad traffic crossed the tunnel at all (verified by a 75s capture during an ad attempt), and the ad still would not load. What remained was a choice with no good side: `googleads.g.doubleclick.net` is the AdMob endpoint for EVERY app, so allowlisting it to serve our own ad silently unblocks in-app ads across the device — you cannot serve AdMob and block AdMob on the same phone with DNS. Monetisation goes back to the subscription seam, which is one function (`entitledToAdBlocking`) and already in place |
+| 2026-09-18 | The app is back inside the tunnel, and the exit check with it | Self-exclusion existed only so AdMob could reach a non-datacenter address. With the ads gone its only remaining effect was to break `/whoami` — the API saw the phone's real address, so the connect screen would report a leak on every healthy connection. Reverting restores V1 |
 
 | 2026-09-17 | **The app excludes itself from the tunnel**, always, and the AdMob allowlist is gone | AdMob will not serve a rewarded ad to a request from a cloud exit address — confirmed by testing both ways: the same ad loads with the VPN off and fails with it on, every time, as `LoadAdError code 2`. Since the ad is what buys ad blocking, a tunnel that swallows it makes the feature unusable. Excluding our own package sends its ad traffic out over the phone's own connection, and confines the exemption to this app instead of weakening everybody's filtering: the five AdMob hosts are no longer allowlisted, so `pagead2` and `tpc` web ads are blocked for users again. Our own traffic is API calls and ads, neither of which anyone runs a VPN to hide from us |
 | 2026-09-17 | The exit check came off the connect screen, and V1 is reopened | It asked the API what source address our request arrived from — the one claim on that screen a broken tunnel could not fake. With this app outside the tunnel the API always sees the phone's real address, so the card would report a leak on every healthy connection. A false alarm where the user looks for proof is worse than no proof. `ExitCheckCard` and `/whoami` are intact and still tested directly; the honest replacement is server-attested — the node knows the peer's last handshake and byte counters, which a device cannot fake about itself |
@@ -277,7 +280,7 @@ Append here as decisions are made, so a later session does not re-litigate them.
 
 ## Known issues / follow-ups
 
-- **The reward is taken on trust.** `POST /users/me/ad-block/grant` believes the client
+- ~~**The reward is taken on trust.**~~ — moot, B3 removed. Kept for the record: `POST /users/me/ad-block/grant` believes the client
   when it says an ad was watched; nothing proves it. AdMob's server-side verification
   (SSV) callback is the fix. Until then `AD_BLOCK_MAX_BANKED_MS` (1h) is the only thing
   bounding a caller in a loop.

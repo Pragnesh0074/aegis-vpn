@@ -8,7 +8,6 @@ class UserProfile {
     required this.maxDevices,
     required this.adBlockEnabled,
     required this.adBlockEntitled,
-    required this.adBlockRemaining,
   });
 
   final String id;
@@ -32,13 +31,8 @@ class UserProfile {
   /// *why* the switch is off rather than just showing it off.
   final bool adBlockEntitled;
 
-  /// How much of the rewarded-ad grant is left. [Duration.zero] when not
-  /// entitled. The server sends an amount rather than an expiry instant so a
-  /// device with a wrong clock still counts down correctly.
-  final Duration adBlockRemaining;
-
   /// What is actually in force. [adBlockEnabled] alone would lie to a user whose
-  /// grant has run out.
+  /// plan does not include it.
   bool get adBlockActive => adBlockEnabled && adBlockEntitled;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -51,9 +45,6 @@ class UserProfile {
       // Defaulted so an older server that does not send them still parses.
       adBlockEnabled: json['adBlockEnabled'] as bool? ?? true,
       adBlockEntitled: json['adBlockEntitled'] as bool? ?? true,
-      adBlockRemaining: Duration(
-        milliseconds: (json['adBlockRemainingMs'] as num?)?.toInt() ?? 0,
-      ),
     );
   }
 

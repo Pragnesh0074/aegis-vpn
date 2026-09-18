@@ -28,16 +28,6 @@ class ProfileRepository {
     );
     return UserProfile.fromJson(json);
   }
-
-  /// `POST /users/me/ad-block/grant`. Credits one watched rewarded ad and returns
-  /// the refreshed profile, whose `adBlockRemaining` is what the UI counts down.
-  ///
-  /// Called only after the SDK reports the reward was earned. The server takes
-  /// that on trust for now — AdMob's server-side verification callback is what
-  /// would make it real.
-  Future<UserProfile> grantAdBlockReward() async {
-    return UserProfile.fromJson(await _api.postJson(ApiEndpoints.meAdBlockGrant));
-  }
 }
 
 @Riverpod(keepAlive: true)

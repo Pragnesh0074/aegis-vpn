@@ -278,11 +278,13 @@ else
 #
 # You will need this. Blocklists routinely break payment gateways, delivery
 # tracking and OAuth login flows. Add the domain, then: systemctl reload blocky
-# No AdMob exemption here, deliberately. The rewarded ad that funds ad blocking
-# used to need one, which meant weakening everybody's filtering — pagead2 and tpc
-# serve web ads too — so that our own ad could load. The app is now excluded from
-# the tunnel instead, so its ad traffic never reaches this resolver and nobody
-# else's blocking pays for it.
+# Nothing is exempted by default, and ad networks especially are not.
+#
+# A rewarded-ad experiment once needed googleads.g.doubleclick.net allowlisted so
+# our own ad could load. That host is the AdMob endpoint for EVERY app, so the
+# exemption silently unblocked in-app ads across the whole device. It is gone
+# along with the feature; if a future one needs it back, that trade is the thing
+# to weigh, not the one host.
 ALLOWLIST
   ok "empty allowlist created at /etc/blocky/allowlist.txt"
 fi

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,9 +11,6 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../autoconnect/presentation/auto_connect_controller.dart';
 import '../../killswitch/presentation/ad_block_controller.dart';
 import '../../killswitch/presentation/kill_switch_controller.dart';
-import '../../rewards/data/ad_ids.dart';
-import '../../rewards/data/rewarded_ad_service.dart';
-import '../../rewards/presentation/ad_block_grant_controller.dart';
 import '../../splittunnel/presentation/split_tunnel_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import '../domain/user_profile.dart';
@@ -72,12 +68,6 @@ class ProfileScreen extends ConsumerWidget {
 class _PrivacyGroup extends ConsumerWidget {
   const _PrivacyGroup();
 
-  static String _clock(Duration left) {
-    final minutes = left.inMinutes;
-    final seconds = left.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
   Future<void> _toggle(BuildContext context, WidgetRef ref, bool enabled) async {
     try {
       await ref.read(adBlockControllerProvider.notifier).setEnabled(enabled: enabled);
@@ -86,99 +76,30 @@ class _PrivacyGroup extends ConsumerWidget {
     }
   }
 
-  Future<void> _watchAd(BuildContext context, WidgetRef ref) async {
-    final outcome =
-        await ref.read(adBlockGrantControllerProvider.notifier).watchAdForTime();
-    if (!context.mounted) return;
-
-    switch (outcome) {
-      case AdOutcome.earned:
-        showMessage(context, 'Ads blocked for ${adBlockGrantWindow.inMinutes} more minutes.');
-      // Closing an ad early is a choice, not a fault.
-      case AdOutcome.dismissed:
-        showMessage(context, 'Ad closed early — no time added.');
-      case AdOutcome.unavailable:
-        showMessage(context, 'No ad available right now. Try again shortly.', isError: true);
-      case AdOutcome.failed:
-        showMessage(context, 'That ad could not be shown. Try again.', isError: true);
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setting = ref.watch(adBlockControllerProvider);
-    final grant = ref.watch(adBlockGrantControllerProvider).value;
-
-    final active = grant?.isActive ?? false;
-    final watching = grant?.watching ?? false;
+    final enabled = setting.value ?? false;
 
     return SettingsGroup(
       title: 'Privacy',
       children: [
         SettingsTile(
           label: 'Ad blocker',
-          description: active
-              ? 'Ads and trackers are being blocked.'
-              : 'Watch a short ad to block ads and trackers for '
-                  '${adBlockGrantWindow.inMinutes} minutes.',
+          description: 'Refuses ad and tracker domains at the server, in the '
+              'browser and inside apps.',
           control: Switch(
-            value: (setting.value ?? false) && active,
-            // Nothing to turn off before an ad has bought any time, and a switch
-            // that springs back is worse than one that will not move.
-            onChanged:
-                (setting.isLoading || !active) ? null : (v) => _toggle(context, ref, v),
+            value: enabled,
+            // Nothing to toggle until the profile has loaded; moving it early
+            // would write a preference nobody has read.
+            onChanged: setting.isLoading ? null : (v) => _toggle(context, ref, v),
           ),
-          footer: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (active) ...[
-                Row(
-                  children: [
-                    Icon(Icons.timer_outlined, size: 15.r, color: AppColors.textHigh),
-                    SizedBox(width: 5.w),
-                    Text(
-                      '${_clock(grant!.remaining)} left',
-                      style: TextStyle(
-                        fontSize: 12.5.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textHigh,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 8.h),
-              ],
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
-                  onPressed: watching ? null : () => _watchAd(context, ref),
-                  icon: watching
-                      ? SizedBox(
-                          width: 14.r,
-                          height: 14.r,
-                          child: const CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(Icons.play_circle_outline, size: 18.r),
-                  label: Text(
-                    watching
-                        ? 'Loading…'
-                        : active
-                            ? '+${adBlockGrantWindow.inMinutes} min'
-                            : 'Watch ad',
-                  ),
-                ),
-              ),
-              SizedBox(height: 8.h),
-              const SettingsNote(
-                text: 'Ads inside YouTube, Instagram and TikTok still show — they '
-                    'come from the same address as the content.',
-              ),
-              if (AdIds.usingTestIds) ...[
-                SizedBox(height: 6.h),
-                const SettingsNote(text: 'Test ads: this build earns nothing.'),
-              ],
-            ],
-          ),
+          footer: enabled
+              ? const SettingsNote(
+                  text: 'Ads inside YouTube, Instagram and TikTok still show — they '
+                      'come from the same address as the content.',
+                )
+              : null,
         ),
         const _SplitTunnelTile(),
       ],
