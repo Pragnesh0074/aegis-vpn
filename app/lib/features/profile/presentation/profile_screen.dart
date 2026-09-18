@@ -90,8 +90,7 @@ class _PrivacyGroup extends ConsumerWidget {
         SettingsTile(
           label: 'Ad blocker',
           description: entitled
-              ? 'Refuses ad and tracker domains at the server, in the browser '
-                  'and inside apps.'
+              ? 'Blocks ad and tracker domains, in apps and the browser.'
               : 'Subscribe to block ads and trackers.',
           control: entitled
               ? Switch(
@@ -124,9 +123,9 @@ class _SplitTunnelTile extends ConsumerWidget {
     final excluded = ref.watch(excludedAppsProvider).value?.length ?? 0;
     final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
     return SettingsTile(
-      label: 'Apps outside the VPN',
+      label: 'Split Tunnel',
       description: !entitled
-          ? 'Subscribe to keep some apps off the VPN.'
+          ? 'Subscribe to keep chosen apps off the VPN.'
           : excluded == 0
               ? 'All apps go through the VPN.'
               : '$excluded app${excluded == 1 ? '' : 's'} bypass the VPN.',
@@ -236,21 +235,6 @@ class _AccessCard extends StatelessWidget {
 class _ConnectionGroup extends ConsumerWidget {
   const _ConnectionGroup();
 
-  Future<void> _killSwitch(BuildContext context, WidgetRef ref, bool enabled) async {
-    try {
-      await ref.read(killSwitchControllerProvider.notifier).setEnabled(enabled: enabled);
-    } catch (error) {
-      if (context.mounted) showMessage(context, describeError(error), isError: true);
-    }
-  }
-
-  Future<void> _openSystemSettings(BuildContext context, WidgetRef ref) async {
-    final opened =
-        await ref.read(killSwitchControllerProvider.notifier).openSystemVpnSettings();
-    if (!context.mounted || opened) return;
-    showMessage(context, 'No VPN settings screen on this device.', isError: true);
-  }
-
   Future<void> _addTile(BuildContext context, WidgetRef ref) async {
     final added = await ref.read(tunnelChannelProvider).requestAddTile();
     if (!context.mounted) return;
@@ -265,34 +249,17 @@ class _ConnectionGroup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
     final reconnect = (ref.watch(killSwitchControllerProvider).value ?? false) && entitled;
-    // What the platform actually has armed, which can lag the stored setting.
-    final armed = ref.watch(tunnelStatusStreamProvider).value?.killSwitch ?? false;
 
     return SettingsGroup(
       title: 'Connection',
       children: [
         SettingsTile(
-          label: 'Reconnect if it drops',
+          label: 'Kill switch',
           description: entitled
-              ? 'Brings the VPN back automatically after a lost connection.'
-              : 'Subscribe to reconnect automatically.',
-          control: entitled
-              ? Switch(
-                  value: reconnect,
-                  onChanged: (v) => _killSwitch(context, ref, v),
-                )
-              : const _LockedChip(),
-          onTap: entitled ? null : () => context.go(AppRoutes.paywall),
-          footer: reconnect && !armed
-              ? const SettingsNote(
-                  text: 'Takes effect once the VPN has run at least once.',
-                )
-              : null,
-        ),
-        SettingsTile(
-          label: 'Block traffic when VPN is off',
-          description: 'An Android setting — only the system can do this.',
-          onTap: () => _openSystemSettings(context, ref),
+              ? (reconnect ? 'On — rebuilds the tunnel if it drops.' : 'Off.')
+              : 'Subscribe to rebuild a dropped tunnel.',
+          control: entitled ? null : const _LockedChip(),
+          onTap: () => context.go(entitled ? AppRoutes.killSwitch : AppRoutes.paywall),
         ),
         SettingsTile(
           label: 'Quick Settings tile',

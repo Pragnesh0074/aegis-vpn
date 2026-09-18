@@ -12,6 +12,7 @@ import 'package:aegis_vpn/features/profile/domain/user_profile.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_providers.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_screen.dart';
 import 'package:aegis_vpn/features/profile/presentation/widgets/settings_tile.dart';
+import 'package:aegis_vpn/features/killswitch/presentation/kill_switch_screen.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
 import 'package:aegis_vpn/features/nodes/presentation/locations_screen.dart';
 import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
@@ -295,6 +296,7 @@ void main() {
         // The Protection page is gone; every switch it held has to be reachable
         // from here, under a name someone would actually search for.
         expect(find.text('Ad blocker'), findsOneWidget);
+        expect(find.text('Split Tunnel'), findsOneWidget);
 
         // Off in this fixture, and freely switchable: entitlement is no longer
         // rented from an ad, so the only thing that can hold the switch still is
@@ -311,17 +313,11 @@ void main() {
         expect(adBlockSwitch.value, isFalse);
         expect(adBlockSwitch.onChanged, isNotNull);
 
-        await scrollTo(find.text('Reconnect if it drops'));
-        expect(find.text('Reconnect if it drops'), findsOneWidget);
-
-        // The honesty this page exists for: an app cannot block traffic on
-        // Android, so it must say who can.
-        await scrollTo(find.text('Block traffic when VPN is off'));
-        expect(
-          find.textContaining('only the system can do this'),
-          findsOneWidget,
-          reason: 'an app must not imply it can block traffic itself',
-        );
+        // Both halves of the kill switch now live behind one row — the reconnect
+        // toggle and Android's always-on setting, which are different things and
+        // need more room than a settings line to tell apart.
+        await scrollTo(find.text('Kill switch'));
+        expect(find.text('Kill switch'), findsOneWidget);
 
         await scrollTo(find.text('Quick Settings tile'));
         expect(find.text('Quick Settings tile'), findsOneWidget);
@@ -530,6 +526,53 @@ void main() {
       reason: 'a locked feature must not show a switch that does nothing',
     );
     expect(find.text('Premium'), findsWidgets);
+
+    expect(tester.takeException(), isNull);
+  });
+
+  // The kill switch screen exists to keep two things apart: the tunnel Aegis can
+  // rebuild, and the traffic only Android can block. If it ever stops saying so,
+  // the app is implying it can do the second — which is the one claim a VPN must
+  // never make falsely.
+  testWidgets('the kill switch screen separates what we do from what Android does',
+      (tester) async {
+    await pumpScreen(
+      tester,
+      const KillSwitchScreen(),
+      surfaceSize: const Size(430, 932),
+      overrides: [
+        userProfileProvider.overrideWith(
+          (ref) async => UserProfile(
+            id: 'u1',
+            email: 'someone@example.com',
+            createdAt: DateTime.utc(2026),
+            deviceCount: 1,
+            maxDevices: 5,
+            adBlockEnabled: true,
+            adBlockEntitled: true,
+            access: const AccessState(
+              entitled: true,
+              onTrial: true,
+              subscribed: false,
+              remaining: Duration(hours: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reconnect if it drops'), findsOneWidget);
+    expect(find.text('Block traffic while the VPN is off'), findsOneWidget);
+    expect(
+      find.textContaining('Android will not let an app'),
+      findsOneWidget,
+      reason: 'the limit has to be stated, not implied',
+    );
+
+    // The directions are useless without the way to act on them.
+    expect(find.text('Open Android VPN settings'), findsOneWidget);
+    expect(find.textContaining('Always-on VPN'), findsOneWidget);
 
     expect(tester.takeException(), isNull);
   });

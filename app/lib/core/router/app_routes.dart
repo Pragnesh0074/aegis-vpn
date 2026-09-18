@@ -30,6 +30,12 @@ abstract final class AppRoutes {
   static const paywallSegment = 'premium';
   static const paywall = '$account/$paywallSegment';
 
+  /// The kill switch and Android's always-on setting. Its own screen because the
+  /// two are different things and the difference has to be explained, not
+  /// squeezed into a settings row.
+  static const killSwitchSegment = 'kill-switch';
+  static const killSwitch = '$account/$killSwitchSegment';
+
   static const splitTunnelSegment = 'split-tunnel';
   static const splitTunnel = '$account/$splitTunnelSegment';
 
