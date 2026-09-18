@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../history/presentation/session_recorder.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../../killswitch/presentation/kill_switch_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import '../../tunnel/presentation/platform_connect_watcher.dart';
@@ -15,6 +16,10 @@ import '../../tunnel/presentation/platform_connect_watcher.dart';
 /// navigation stack and scroll position when the user switches away and back.
 class HomeShell extends ConsumerWidget {
   const HomeShell({super.key, required this.navigationShell});
+
+  /// Index of the Account branch in `buildHomeRoutes`. Tied to the order of the
+  /// destinations below and to the branch order there; the two must agree.
+  static const _accountTab = 2;
 
   final StatefulNavigationShell navigationShell;
 
@@ -57,10 +62,25 @@ class HomeShell extends ConsumerWidget {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           // `initialLocation: true` on a re-tap pops that tab back to its root,
           // which is the behaviour people expect from a tab bar.
-          onDestinationSelected: (index) => navigationShell.goBranch(
-            index,
-            initialLocation: index == navigationShell.currentIndex,
-          ),
+          onDestinationSelected: (index) {
+            // The account page is the one whose data goes stale without anything
+            // happening in the app: entitlement expires against the clock, and a
+            // subscription can be bought or lapse elsewhere. The shell keeps each
+            // tab alive in an IndexedStack, so its widgets are never rebuilt from
+            // scratch and nothing re-reads the profile — before this, it was
+            // fetched once per app launch.
+            //
+            // `invalidate` rather than a fresh read, so the previous profile
+            // stays on screen while the new one is in flight. `AsyncView` passes
+            // `skipLoadingOnRefresh`, which is what stops this flashing a spinner
+            // over content on every tab tap — /users/me takes over a second.
+            if (index == _accountTab) ref.invalidate(userProfileProvider);
+
+            navigationShell.goBranch(
+              index,
+              initialLocation: index == navigationShell.currentIndex,
+            );
+          },
           destinations: [
             NavigationDestination(
               icon: Icon(
