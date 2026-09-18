@@ -59,15 +59,15 @@ object UntrustedWifiNotice {
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_tile_shield)
             .setContentTitle("Connected on $ssid")
-            .setContentText("Not a trusted network, so Aegis turned on. Trust it to stop that.")
+            .setContentText("Not a trusted network, so Aegis turned on. Trust it to disconnect.")
             .setStyle(
                 Notification.BigTextStyle().bigText(
                     "Aegis connected because $ssid is not on your trusted list. " +
-                        "Trust it and Aegis will leave it alone from now on.",
+                        "Trusting it disconnects now and leaves this network alone from now on.",
                 ),
             )
             .addAction(
-                Notification.Action.Builder(null, "Trust this network", trust).build(),
+                Notification.Action.Builder(null, "Trust & disconnect", trust).build(),
             )
             .setAutoCancel(true)
             .build()

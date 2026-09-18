@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure_log.dart';
 import '../../tunnel/data/tunnel_channel.dart';
+import '../../tunnel/presentation/tunnel_controller.dart';
 import 'auto_connect_controller.dart';
 
 part 'wifi_notice_watcher.g.dart';
@@ -67,11 +68,28 @@ class WifiNoticeWatcher extends _$WifiNoticeWatcher {
 
   Future<void> _trustFromNotification(String ssid) async {
     try {
-      await ref.read(autoConnectProvider.notifier).trust(ssid);
+      await _trustAndStandDown(ssid);
       await ref.read(tunnelChannelProvider).ackTrustRequest();
     } catch (error, stack) {
       logFailure('trusting a network from the notification', error, stack);
     }
+  }
+
+  /// Trusts [ssid] and drops the tunnel auto-connect raised for it.
+  ///
+  /// Trusting a network means "I do not need the VPN here", so leaving the
+  /// tunnel up would honour half the request: it would stop connecting here
+  /// *next* time while carrying the user's traffic through a node they just said
+  /// they did not want. Auto-connect will not raise it again — the network is on
+  /// the list now — and `disconnect` marks the drop as user-requested, so the
+  /// kill switch does not immediately rebuild it.
+  ///
+  /// Safe when the tunnel is already down: the prompt only appears when
+  /// auto-connect brought it up, but a user can always have dropped it by hand
+  /// between the notice and the tap.
+  Future<void> _trustAndStandDown(String ssid) async {
+    await ref.read(autoConnectProvider.notifier).trust(ssid);
+    await ref.read(tunnelControllerProvider.notifier).disconnect();
   }
 
   /// The user answered the prompt. Clears it here and on the platform, so it is
@@ -80,7 +98,7 @@ class WifiNoticeWatcher extends _$WifiNoticeWatcher {
     _answered = state;
     state = null;
     try {
-      if (trust != null) await ref.read(autoConnectProvider.notifier).trust(trust);
+      if (trust != null) await _trustAndStandDown(trust);
       await ref.read(tunnelChannelProvider).ackUntrustedWifi();
     } catch (error, stack) {
       logFailure('answering the untrusted-network prompt', error, stack);

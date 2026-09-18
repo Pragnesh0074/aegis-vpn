@@ -5,6 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../tunnel/data/tunnel_channel.dart';
+import '../../tunnel/presentation/tunnel_controller.dart';
 import '../domain/auto_connect_settings.dart';
 import 'auto_connect_controller.dart';
 
@@ -36,8 +37,27 @@ class TrustedNetworksScreen extends ConsumerWidget {
       );
       return;
     }
+    // Trusting the network you are standing on means the tunnel auto-connect
+    // raised for it should come down — leaving it up would honour half the
+    // request. `disconnect` marks the drop as user-requested, so the kill switch
+    // does not rebuild it.
+    await ref.read(tunnelControllerProvider.notifier).disconnect();
+    if (!context.mounted) return;
+
     ref.invalidate(currentWifiProvider);
-    showMessage(context, '$ssid is trusted. Aegis will not connect on it.');
+    showMessage(context, '$ssid is trusted. Aegis disconnected and will leave it alone.');
+  }
+
+  /// Trusts a network from the "recently joined" list.
+  ///
+  /// Only drops the tunnel when it is the network the device is actually on.
+  /// Trusting the office from the sofa should not disconnect you from the café
+  /// you are sitting in.
+  Future<void> _trustSeen(WidgetRef ref, String ssid, {required bool isCurrent}) async {
+    await ref.read(autoConnectProvider.notifier).trust(ssid);
+    if (isCurrent) {
+      await ref.read(tunnelControllerProvider.notifier).disconnect();
+    }
   }
 
   Future<void> _grant(BuildContext context, WidgetRef ref) async {
@@ -136,7 +156,7 @@ class TrustedNetworksScreen extends ConsumerWidget {
                 _SeenRow(
                   ssid: ssid,
                   isCurrent: ssid == current,
-                  onTrust: () => ref.read(autoConnectProvider.notifier).trust(ssid),
+                  onTrust: () => _trustSeen(ref, ssid, isCurrent: ssid == current),
                 ),
             ],
           ],

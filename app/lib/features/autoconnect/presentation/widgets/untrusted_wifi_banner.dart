@@ -57,7 +57,7 @@ class UntrustedWifiBanner extends ConsumerWidget {
           SizedBox(height: 4.h),
           Text(
             'It is not a trusted network, so Aegis turned on by itself. Trust it '
-            'and Aegis will leave it alone next time.',
+            'to disconnect and leave this network alone from now on.',
             style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
           ),
           SizedBox(height: 12.h),
@@ -66,14 +66,14 @@ class UntrustedWifiBanner extends ConsumerWidget {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => notifier.dismiss(trust: ssid),
-                  child: const Text('Trust this network'),
+                  child: const Text('Trust & disconnect'),
                 ),
               ),
               SizedBox(width: 10.w),
               Expanded(
                 child: FilledButton(
                   onPressed: () => notifier.dismiss(),
-                  child: const Text('Keep protecting'),
+                  child: const Text('Stay protected'),
                 ),
               ),
             ],

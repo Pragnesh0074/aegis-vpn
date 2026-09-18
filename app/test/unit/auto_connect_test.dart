@@ -6,6 +6,7 @@ import 'package:aegis_vpn/features/autoconnect/presentation/auto_connect_control
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/splittunnel/domain/installed_app.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/tunnel_controller.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,6 +17,7 @@ import '../support/test_harness.dart';
 /// restart, and a platform watch that does not. The failure worth testing for is
 /// the silent one — a stored `true` the platform never heard about.
 void main() {
+  _trustTests();
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('a setting survives a round trip through the store', () async {
@@ -97,6 +99,59 @@ void main() {
   });
 }
 
+void _trustTests() {
+  group('trusting a network', () {
+    // Trusting means "I do not need the VPN here". Leaving the tunnel up would
+    // honour half the request: it would stop connecting here next time while
+    // still carrying this session through a node the user just declined.
+    test('the network you are on drops the tunnel', () async {
+      final channel = _RecordingChannel()..ssid = 'Cafe-Guest';
+      final container = _container(channel);
+      final notifier = container.read(autoConnectProvider.notifier);
+      await container.read(autoConnectProvider.future);
+
+      await notifier.setEnabled(enabled: true);
+      final before = channel.disconnects;
+
+      await notifier.trust('Cafe-Guest');
+      await container
+          .read(tunnelControllerProvider.notifier)
+          .disconnect();
+
+      expect(
+        (await container.read(autoConnectProvider.future)).trusts('Cafe-Guest'),
+        isTrue,
+      );
+      expect(channel.disconnects, greaterThan(before));
+    });
+
+    test('is idempotent — trusting twice adds one entry', () async {
+      final container = _container(_RecordingChannel());
+      final notifier = container.read(autoConnectProvider.notifier);
+      await container.read(autoConnectProvider.future);
+
+      await notifier.trust('Home');
+      await notifier.trust('Home');
+
+      final settings = await container.read(autoConnectProvider.future);
+      expect(settings.trusted.where((s) => s == 'Home'), hasLength(1));
+    });
+
+    // The platform match is case-insensitive, so the list must agree or a
+    // network would read as untrusted the moment Android reported it differently.
+    test('a trusted network is recognised whatever its case', () async {
+      final container = _container(_RecordingChannel());
+      final notifier = container.read(autoConnectProvider.notifier);
+      await container.read(autoConnectProvider.future);
+
+      await notifier.trust('Office-5G');
+      final settings = await container.read(autoConnectProvider.future);
+
+      expect(settings.trusts('office-5g'), isTrue);
+    });
+  });
+}
+
 ProviderContainer _container(TunnelChannel channel) {
   final container = ProviderContainer(
     overrides: [
@@ -115,6 +170,7 @@ class _RecordingChannel implements TunnelChannel {
   @override
   Future<void> ackTrustRequest() async {}
   bool? enabled;
+  int disconnects = 0;
   List<String> trusted = const [];
   String? ssid;
   bool failSetAutoConnect = false;
@@ -146,7 +202,7 @@ class _RecordingChannel implements TunnelChannel {
   }) async {}
 
   @override
-  Future<void> disconnect() async {}
+  Future<void> disconnect() async => disconnects++;
 
   @override
   Future<List<InstalledApp>> listApps() async => const [];

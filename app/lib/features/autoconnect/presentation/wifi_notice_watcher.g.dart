@@ -86,7 +86,7 @@ final class WifiNoticeWatcherProvider
   }
 }
 
-String _$wifiNoticeWatcherHash() => r'b07f1d224e444f1d590197eee6c4d341ee464f80';
+String _$wifiNoticeWatcherHash() => r'5b215ae618460264f2170a9bb2e755eddfe6a1bc';
 
 /// Turns the platform's Wi-Fi signals into stored state.
 ///
