@@ -1,8 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../tunnel/data/tunnel_channel.dart';
-import '../data/whoami_repository.dart';
-import '../domain/exit_check.dart';
+import '../../../tunnel/data/tunnel_channel.dart';
+import '../../data/whoami_repository.dart';
+import '../../domain/exit_check.dart';
 
 part 'exit_check_providers.g.dart';
 

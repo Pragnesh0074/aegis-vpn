@@ -4,11 +4,11 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../history/presentation/session_recorder.dart';
-import '../../profile/presentation/profile_providers.dart';
-import '../../killswitch/presentation/kill_switch_controller.dart';
+import '../../history/presentation/controller/session_recorder.dart';
+import '../../profile/presentation/controller/profile_providers.dart';
+import '../../killswitch/presentation/controller/kill_switch_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
-import '../../tunnel/presentation/platform_connect_watcher.dart';
+import '../../tunnel/presentation/controller/platform_connect_watcher.dart';
 
 /// Bottom-nav shell for the signed-in app.
 ///

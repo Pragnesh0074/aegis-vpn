@@ -5,12 +5,12 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
-import '../../profile/presentation/profile_providers.dart';
+import '../../profile/presentation/controller/profile_providers.dart';
 import '../../tunnel/data/tunnel_config_store.dart';
 import '../domain/device.dart';
 import 'device_config_screen.dart';
-import 'devices_controller.dart';
-import 'devices_providers.dart';
+import 'controller/devices_controller.dart';
+import 'controller/devices_providers.dart';
 import 'widgets/device_tile.dart';
 
 /// `GET /devices`, with revoke.
@@ -57,7 +57,11 @@ class DevicesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _remove(BuildContext context, WidgetRef ref, Device device) async {
+  Future<void> _remove(
+    BuildContext context,
+    WidgetRef ref,
+    Device device,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -81,7 +85,9 @@ class DevicesScreen extends ConsumerWidget {
 
     if (confirmed != true) return;
 
-    final removed = await ref.read(devicesControllerProvider.notifier).removeDevice(device.id);
+    final removed = await ref
+        .read(devicesControllerProvider.notifier)
+        .removeDevice(device.id);
     if (context.mounted && removed) {
       showMessage(context, '${device.name} removed');
     }
@@ -111,7 +117,9 @@ class DevicesScreen extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 13.sp,
                     fontWeight: FontWeight.w600,
-                    color: p.hasDeviceCapacity ? AppColors.textMuted : AppColors.danger,
+                    color: p.hasDeviceCapacity
+                        ? AppColors.textMuted
+                        : AppColors.danger,
                   ),
                 ),
               ),
@@ -176,7 +184,11 @@ class _NoDevices extends StatelessWidget {
                 'One is registered automatically the first time you connect. A '
                 'keypair is generated here and only the public half is uploaded.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+                style: TextStyle(
+                  fontSize: 12.5.sp,
+                  color: AppColors.textMuted,
+                  height: 1.4,
+                ),
               ),
             ],
           ),

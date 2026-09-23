@@ -3,15 +3,16 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../data/device_key_store.dart';
-import '../data/devices_repository.dart';
-import '../domain/device.dart';
+import '../../data/device_key_store.dart';
+import '../../data/devices_repository.dart';
+import '../../domain/device.dart';
 
 part 'devices_providers.g.dart';
 
 /// `GET /devices` — the account's active peers.
 @Riverpod(keepAlive: true)
-Future<List<Device>> devices(Ref ref) => ref.watch(devicesRepositoryProvider).list();
+Future<List<Device>> devices(Ref ref) =>
+    ref.watch(devicesRepositoryProvider).list();
 
 /// The private key for one device, or null if this phone does not hold it.
 ///

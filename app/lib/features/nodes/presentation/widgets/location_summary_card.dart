@@ -5,7 +5,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widgets/async_view.dart';
 import '../../domain/vpn_location.dart';
-import '../selected_node.dart';
+import '../controller/selected_node.dart';
 import 'location_tile.dart';
 
 /// Where traffic is headed, on the connect screen, tappable through to the
@@ -37,7 +37,10 @@ class LocationSummaryCard extends ConsumerWidget {
             border: Border.all(color: AppColors.outline),
           ),
           child: switch (choice) {
-            AsyncLoading() => const _Message(text: 'Finding locations…', showSpinner: true),
+            AsyncLoading() => const _Message(
+              text: 'Finding locations…',
+              showSpinner: true,
+            ),
             // A failed node list is not fatal — connecting omits `nodeId` and
             // lets the backend choose — so this reads as a line, not a blocker.
             AsyncError(:final error) => _Message(text: describeError(error)),

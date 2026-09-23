@@ -5,7 +5,7 @@ import 'package:aegis_vpn/features/devices/domain/device.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/history/data/session_history_store.dart';
 import 'package:aegis_vpn/features/history/domain/vpn_session_record.dart';
-import 'package:aegis_vpn/features/history/presentation/session_recorder.dart';
+import 'package:aegis_vpn/features/history/presentation/controller/session_recorder.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_config_store.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
@@ -31,7 +31,11 @@ void main() {
     tunnelIp: '10.8.0.4/32',
     dns: '10.8.0.1',
     mtu: 1420,
-    node: const DeviceNode(id: 'n1', name: 'Frankfurt #1', region: 'de-frankfurt'),
+    node: const DeviceNode(
+      id: 'n1',
+      name: 'Frankfurt #1',
+      region: 'de-frankfurt',
+    ),
     peer: const PeerConfig(
       publicKey: 'kP1LqYyZ9Xn2vB7cD4eF6gH8jK0mN3pQ5rS7tU9wX1Y=',
       endpoint: '3.71.204.118:51820',
@@ -41,14 +45,14 @@ void main() {
   );
 
   TunnelStatus up(int rx, int tx) => TunnelStatus(
-        state: TunnelState.connected,
-        deviceId: 'd1',
-        stats: TunnelStats(rxBytes: rx, txBytes: tx, lastHandshake: DateTime.now()),
-      );
+    state: TunnelState.connected,
+    deviceId: 'd1',
+    stats: TunnelStats(rxBytes: rx, txBytes: tx, lastHandshake: DateTime.now()),
+  );
 
   /// A container with the recorder running against a stream the test drives.
   ({ProviderContainer container, StreamController<TunnelStatus> status})
-      harness() {
+  harness() {
     final status = StreamController<TunnelStatus>.broadcast();
     final container = ProviderContainer(
       overrides: [
@@ -74,7 +78,10 @@ void main() {
   /// anything is listening, and the recorder's subscription is established a
   /// turn after the provider is first read — so a status added in the same turn
   /// would never arrive and the session would never open.
-  Future<void> pump(StreamController<TunnelStatus> status, TunnelStatus value) async {
+  Future<void> pump(
+    StreamController<TunnelStatus> status,
+    TunnelStatus value,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 5));
     status.add(value);
     await Future<void>.delayed(const Duration(milliseconds: 5));
@@ -133,37 +140,44 @@ void main() {
     expect(sessions.single.rxBytes, 8192);
   });
 
-  test('an interface that came up and carried nothing is not recorded', () async {
-    final (:container, :status) = harness();
+  test(
+    'an interface that came up and carried nothing is not recorded',
+    () async {
+      final (:container, :status) = harness();
 
-    await pump(status, up(0, 0));
-    await pump(status, TunnelStatus.disconnected);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      await pump(status, up(0, 0));
+      await pump(status, TunnelStatus.disconnected);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    expect(await container.read(sessionHistoryStoreProvider).read(), isEmpty);
-  });
+      expect(await container.read(sessionHistoryStoreProvider).read(), isEmpty);
+    },
+  );
 
-  test('a session whose config is gone is still recorded, without a location',
-      () async {
-    // Re-provisioning replaces the cached config. Dropping the row would lose a
-    // real session; inventing a country would be worse than admitting it.
-    final (:container, :status) = harness();
+  test(
+    'a session whose config is gone is still recorded, without a location',
+    () async {
+      // Re-provisioning replaces the cached config. Dropping the row would lose a
+      // real session; inventing a country would be worse than admitting it.
+      final (:container, :status) = harness();
 
-    await pump(status, up(1024, 1024));
-    await pump(status, TunnelStatus.disconnected);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      await pump(status, up(1024, 1024));
+      await pump(status, TunnelStatus.disconnected);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    final sessions = await container.read(sessionHistoryStoreProvider).read();
-    expect(sessions.single.nodeName, isNull);
-    expect(sessions.single.totalBytes, 2048);
-  });
+      final sessions = await container.read(sessionHistoryStoreProvider).read();
+      expect(sessions.single.nodeName, isNull);
+      expect(sessions.single.totalBytes, 2048);
+    },
+  );
 
   test('history is newest first and capped', () async {
     final store = SessionHistoryStore(InMemorySecureStore());
 
     for (var i = 0; i < SessionHistoryStore.limit + 5; i++) {
       await store.add(
-        VpnSessionRecordFixture.at(DateTime.utc(2026, 9, 15).add(Duration(hours: i))),
+        VpnSessionRecordFixture.at(
+          DateTime.utc(2026, 9, 15).add(Duration(hours: i)),
+        ),
       );
     }
 
@@ -176,11 +190,11 @@ void main() {
 /// A throwaway record, for the store's own behaviour rather than the recorder's.
 abstract final class VpnSessionRecordFixture {
   static VpnSessionRecord at(DateTime startedAt) => VpnSessionRecord(
-        startedAt: startedAt,
-        endedAt: startedAt.add(const Duration(minutes: 5)),
-        rxBytes: 1024,
-        txBytes: 512,
-        nodeName: 'Mumbai #1',
-        region: 'in-mumbai',
-      );
+    startedAt: startedAt,
+    endedAt: startedAt.add(const Duration(minutes: 5)),
+    rxBytes: 1024,
+    txBytes: 512,
+    nodeName: 'Mumbai #1',
+    region: 'in-mumbai',
+  );
 }

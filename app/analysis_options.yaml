@@ -7,6 +7,8 @@ analyzer:
     # Pub packages get vendored under build/ for the iOS SPM setup, and analysing
     # a dependency's own test suite reports problems we cannot fix and did not write.
     - "build/**"
+    - android/**
+    - ios/**
   errors:
     # Codegen for a provider needs the `part` directive to resolve before the
     # generated file exists; a missing part is a build ordering artefact, not a bug.

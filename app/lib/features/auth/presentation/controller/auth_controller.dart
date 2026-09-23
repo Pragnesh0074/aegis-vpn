@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/session/auth_tokens.dart';
-import '../../../core/session/session_controller.dart';
-import '../../../core/session/session_store.dart';
-import '../data/auth_repository.dart';
+import '../../../../core/session/auth_tokens.dart';
+import '../../../../core/session/session_controller.dart';
+import '../../../../core/session/session_store.dart';
+import '../../data/auth_repository.dart';
 
 part 'auth_controller.g.dart';
 
@@ -21,19 +21,17 @@ class AuthController extends _$AuthController {
 
   Future<void> register({required String email, required String password}) {
     return _submit(
-      () => ref.read(authRepositoryProvider).register(
-            email: email.trim(),
-            password: password,
-          ),
+      () => ref
+          .read(authRepositoryProvider)
+          .register(email: email.trim(), password: password),
     );
   }
 
   Future<void> login({required String email, required String password}) {
     return _submit(
-      () => ref.read(authRepositoryProvider).login(
-            email: email.trim(),
-            password: password,
-          ),
+      () => ref
+          .read(authRepositoryProvider)
+          .login(email: email.trim(), password: password),
     );
   }
 

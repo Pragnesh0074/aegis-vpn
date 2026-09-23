@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../nodes/presentation/nodes_providers.dart';
-import '../../profile/presentation/profile_providers.dart';
-import '../../tunnel/data/tunnel_config_store.dart';
-import '../../tunnel/presentation/vpn_session.dart';
-import '../data/device_key_store.dart';
-import '../data/devices_repository.dart';
+import '../../../nodes/presentation/controller/nodes_providers.dart';
+import '../../../profile/presentation/controller/profile_providers.dart';
+import '../../../tunnel/data/tunnel_config_store.dart';
+import '../../../tunnel/presentation/controller/vpn_session.dart';
+import '../../data/device_key_store.dart';
+import '../../data/devices_repository.dart';
 import 'devices_providers.dart';
 
 part 'devices_controller.g.dart';
@@ -39,7 +39,9 @@ class DevicesController extends _$DevicesController {
       _refreshAfterMutation();
     });
 
-    state = result.hasError ? AsyncError(result.error!, result.stackTrace!) : const AsyncData(null);
+    state = result.hasError
+        ? AsyncError(result.error!, result.stackTrace!)
+        : const AsyncData(null);
     return !result.hasError;
   }
 

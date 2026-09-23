@@ -1,0 +1,59 @@
+{
+  "@@locale": "en",
+  "killSwitchTitle": "Kill switch",
+  "@killSwitchTitle": {
+    "description": "Title for the Kill Switch screen"
+  },
+  "noVpnSettingsScreen": "No VPN settings screen on this device.",
+  "@noVpnSettingsScreen": {
+    "description": "Error message when the system VPN settings cannot be opened"
+  },
+  "reconnectTitle": "Reconnect if it drops",
+  "@reconnectTitle": {
+    "description": "Title for the auto-reconnect card"
+  },
+  "reconnectBody": "If the tunnel goes down without you asking — a lost network, the system reclaiming the VPN — Aegis brings it straight back, up to five times with a growing delay.",
+  "@reconnectBody": {
+    "description": "Description of the auto-reconnect functionality"
+  },
+  "alwaysOn": "Always on",
+  "@alwaysOn": {
+    "description": "Status badge label indicating auto-reconnect is active"
+  },
+  "blockTrafficTitle": "Block traffic while the VPN is off",
+  "@blockTrafficTitle": {
+    "description": "Title for the system-level traffic blocking card"
+  },
+  "blockTrafficBody": "This one is not ours to switch. Android will not let an app block the whole device's traffic — only the system can, and it is the only thing that covers you after a reboot or once Aegis has been swiped away.",
+  "@blockTrafficBody": {
+    "description": "Explanation of Android's OS-level traffic blocking requirement"
+  },
+  "blockTrafficNote": "Without it, traffic uses your normal connection whenever the tunnel is down.",
+  "@blockTrafficNote": {
+    "description": "Warning note when system kill switch is not configured"
+  },
+  "stepOpenSettings": "Open Android's VPN settings with the button below.",
+  "@stepOpenSettings": {
+    "description": "Step 1 for setting up system kill switch"
+  },
+  "stepTapGear": "Tap the gear next to Aegis.",
+  "@stepTapGear": {
+    "description": "Step 2 for setting up system kill switch"
+  },
+  "stepTurnOnAlwaysOn": "Turn on \"Always-on VPN\".",
+  "@stepTurnOnAlwaysOn": {
+    "description": "Step 3 for setting up system kill switch"
+  },
+  "stepTurnOnBlockConnections": "Turn on \"Block connections without VPN\".",
+  "@stepTurnOnBlockConnections": {
+    "description": "Step 4 for setting up system kill switch"
+  },
+  "openSettingsButton": "Open Android VPN settings",
+  "@openSettingsButton": {
+    "description": "Label on the button that opens Android's VPN settings"
+  },
+  "openSettingsHint": "Some phones bury this under Settings → Connections → More → VPN.",
+  "@openSettingsHint": {
+    "description": "Hint text for navigating to VPN settings on various Android OEM devices"
+  }
+}

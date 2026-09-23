@@ -1,7 +1,9 @@
 import 'package:aegis_vpn/app.dart';
 import 'package:aegis_vpn/core/storage/secure_store.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'package:aegis_vpn/generated/l10n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Riverpod 3 keeps `Override` out of the main export; it lives in misc.dart.
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -81,7 +83,17 @@ Future<void> pumpScreen(
         designSize: AegisApp.designSize,
         minTextAdapt: true,
         splitScreenMode: true,
-        builder: (context, _) => MaterialApp(theme: AppTheme.dark(), home: child),
+        builder: (context, _) => MaterialApp(
+          theme: AppTheme.dark(),
+          localizationsDelegates: const [
+            S.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: S.delegate.supportedLocales,
+          home: child,
+        ),
       ),
     ),
   );

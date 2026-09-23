@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'generated/l10n.dart';
 
 class AegisApp extends ConsumerWidget {
   const AegisApp({super.key});
@@ -25,6 +27,13 @@ class AegisApp extends ConsumerWidget {
       builder: (context, child) => MaterialApp.router(
         title: 'Aegis VPN',
         debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          S.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: S.delegate.supportedLocales,
         // Dark only, and pinned rather than following the system: the connect
         // screen is built out of glows over a near-black ground, so a light
         // variant would be a second design rather than a recolour.

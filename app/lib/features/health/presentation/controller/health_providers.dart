@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../data/health_repository.dart';
-import '../domain/health_status.dart';
+import '../../data/health_repository.dart';
+import '../../domain/health_status.dart';
 
 part 'health_providers.g.dart';
 
@@ -10,4 +10,5 @@ part 'health_providers.g.dart';
 /// Not `keepAlive`: this is only meaningful while someone is looking at it, and
 /// the value goes stale immediately.
 @riverpod
-Future<HealthStatus> healthStatus(Ref ref) => ref.watch(healthRepositoryProvider).check();
+Future<HealthStatus> healthStatus(Ref ref) =>
+    ref.watch(healthRepositoryProvider).check();

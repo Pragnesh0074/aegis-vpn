@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../domain/tunnel_status.dart';
-import '../tunnel_controller.dart';
+import '../controller/tunnel_controller.dart';
 import '../../data/tunnel_channel.dart';
 
 /// Connect/disconnect for one device, with what the tunnel is actually doing.
@@ -23,13 +23,17 @@ class TunnelCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final status = ref.watch(tunnelStatusStreamProvider).value ?? TunnelStatus.disconnected;
+    final status =
+        ref.watch(tunnelStatusStreamProvider).value ??
+        TunnelStatus.disconnected;
     final command = ref.watch(tunnelControllerProvider);
 
     // Another device's tunnel is up. Connecting this one would tear that down,
     // so say so rather than silently switching.
     final otherDeviceIsUp =
-        status.state.isUp && status.deviceId != null && status.deviceId != deviceId;
+        status.state.isUp &&
+        status.deviceId != null &&
+        status.deviceId != deviceId;
     final isThisDevice = status.deviceId == deviceId;
     final state = isThisDevice ? status.state : TunnelState.disconnected;
 
@@ -42,7 +46,10 @@ class TunnelCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                _StateDot(state: state, isPeerResponding: status.stats.isPeerResponding),
+                _StateDot(
+                  state: state,
+                  isPeerResponding: status.stats.isPeerResponding,
+                ),
                 SizedBox(width: 10.w),
                 Expanded(
                   child: Column(
@@ -68,7 +75,10 @@ class TunnelCard extends ConsumerWidget {
               Row(
                 children: [
                   Expanded(
-                    child: _Counter(label: 'Received', bytes: status.stats.rxBytes),
+                    child: _Counter(
+                      label: 'Received',
+                      bytes: status.stats.rxBytes,
+                    ),
                   ),
                   Expanded(
                     child: _Counter(label: 'Sent', bytes: status.stats.txBytes),
@@ -102,7 +112,9 @@ class TunnelCard extends ConsumerWidget {
                 // flight, so the button never fights the state it is showing.
                 onPressed: command.isLoading || state.isBusy
                     ? null
-                    : () => ref.read(tunnelControllerProvider.notifier).toggle(deviceId),
+                    : () => ref
+                          .read(tunnelControllerProvider.notifier)
+                          .toggle(deviceId),
                 icon: Icon(state.isUp ? Icons.link_off : Icons.shield_outlined),
                 label: Text(_buttonLabel(state, command.isLoading)),
                 style: state.isUp
@@ -120,11 +132,11 @@ class TunnelCard extends ConsumerWidget {
   }
 
   static String _headline(TunnelState state) => switch (state) {
-        TunnelState.connected => 'Connected',
-        TunnelState.connecting => 'Connecting',
-        TunnelState.disconnecting => 'Disconnecting',
-        TunnelState.disconnected => 'Not connected',
-      };
+    TunnelState.connected => 'Connected',
+    TunnelState.connecting => 'Connecting',
+    TunnelState.disconnecting => 'Disconnecting',
+    TunnelState.disconnected => 'Not connected',
+  };
 
   static String _detail(TunnelState state, TunnelStatus status) {
     return switch (state) {
@@ -132,7 +144,8 @@ class TunnelCard extends ConsumerWidget {
         'Handshake ${Format.lastSeen(status.stats.lastHandshake).toLowerCase()}',
       // Up but nothing coming back. The usual causes are a blocked UDP 51820 or a
       // peer that was revoked server-side while the tunnel stayed up.
-      TunnelState.connected => 'Interface up, but the server has not replied yet',
+      TunnelState.connected =>
+        'Interface up, but the server has not replied yet',
       TunnelState.connecting => 'Waiting for the system VPN permission',
       TunnelState.disconnecting => 'Tearing down the interface',
       TunnelState.disconnected => 'Traffic is not being tunnelled',

@@ -7,7 +7,7 @@ import 'package:aegis_vpn/features/splittunnel/domain/installed_app.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_config_store.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/tunnel_controller.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/tunnel_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -59,11 +59,14 @@ void main() {
     // The two local halves a connect needs, plus the choice under test.
     await container.read(tunnelConfigStoreProvider).save(config);
     await container.read(deviceKeyStoreProvider).save('d1', 'a-private-key');
-    await container
-        .read(excludedAppsStoreProvider)
-        .write({'com.bank.app', 'com.chat.app'});
+    await container.read(excludedAppsStoreProvider).write({
+      'com.bank.app',
+      'com.chat.app',
+    });
 
-    final ok = await container.read(tunnelControllerProvider.notifier).connect('d1');
+    final ok = await container
+        .read(tunnelControllerProvider.notifier)
+        .connect('d1');
 
     expect(ok, isTrue);
     // Sorted, because the store writes them that way — the order is not

@@ -4,7 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
-import '../tunnel_metrics.dart';
+import '../controller/tunnel_metrics.dart';
 
 /// Live download and upload, side by side.
 ///
@@ -144,7 +144,9 @@ class _RateTile extends StatelessWidget {
             '${Format.bytes(totalBytes)} total',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall?.copyWith(color: AppColors.textMuted),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.textMuted,
+            ),
           ),
         ],
       ),

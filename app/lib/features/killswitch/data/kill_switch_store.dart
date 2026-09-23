@@ -22,9 +22,12 @@ class KillSwitchStore {
 
   static const _key = 'aegis.tunnel.killSwitch';
 
-  /// Defaults to off. Arming it without being asked would rebuild tunnels a user
-  /// deliberately dropped.
-  Future<bool> read() async => await _store.read(_key) == 'true';
+  /// Defaults to on. Dropped tunnels are rebuilt automatically to avoid silent leaks.
+  Future<bool> read() async {
+    final raw = await _store.read(_key);
+    if (raw == null) return true;
+    return raw == 'true';
+  }
 
   Future<void> write({required bool enabled}) {
     return _store.write(_key, enabled ? 'true' : 'false');

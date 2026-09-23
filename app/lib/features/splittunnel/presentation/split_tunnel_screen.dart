@@ -4,9 +4,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
-import '../../tunnel/data/tunnel_channel.dart';
+import '../../tunnel/presentation/controller/tunnel_controller.dart';
+import '../../tunnel/presentation/controller/vpn_session.dart';
 import '../domain/installed_app.dart';
-import 'split_tunnel_controller.dart';
+import 'controller/split_tunnel_controller.dart';
 
 /// Which apps skip the tunnel.
 ///
@@ -40,7 +41,9 @@ class _SplitTunnelScreenState extends ConsumerState<SplitTunnelScreen> {
   Widget build(BuildContext context) {
     final apps = ref.watch(installedAppsProvider);
     final excluded = ref.watch(excludedAppsProvider).value ?? const <String>{};
-    final isUp = ref.watch(tunnelStatusStreamProvider).value?.state.isUp ?? false;
+    final isReconnecting =
+        ref.watch(vpnSessionProvider).isLoading ||
+        ref.watch(tunnelControllerProvider).isLoading;
 
     return Scaffold(
       appBar: AppBar(
@@ -63,7 +66,10 @@ class _SplitTunnelScreenState extends ConsumerState<SplitTunnelScreen> {
 
           return Column(
             children: [
-              _Intro(excludedCount: excluded.length, showReconnect: isUp && excluded.isNotEmpty),
+              _Intro(
+                excludedCount: excluded.length,
+                isReconnecting: isReconnecting,
+              ),
               _SearchField(
                 controller: _search,
                 onChanged: (value) => setState(() => _query = value),
@@ -95,13 +101,12 @@ class _SplitTunnelScreenState extends ConsumerState<SplitTunnelScreen> {
 }
 
 class _Intro extends StatelessWidget {
-  const _Intro({required this.excludedCount, required this.showReconnect});
+  const _Intro({required this.excludedCount, required this.isReconnecting});
 
   final int excludedCount;
 
-  /// Only while the tunnel is up and something is actually excluded — otherwise
-  /// the banner would be telling the user to act on nothing.
-  final bool showReconnect;
+  /// True while a split-tunnel change is cycling the tunnel.
+  final bool isReconnecting;
 
   @override
   Widget build(BuildContext context) {
@@ -113,28 +118,40 @@ class _Intro extends StatelessWidget {
           Text(
             excludedCount == 0
                 ? 'Every app uses the tunnel. Tick an app to keep its traffic on '
-                    'your normal connection instead.'
+                      'your normal connection instead.'
                 : '$excludedCount app${excludedCount == 1 ? '' : 's'} will bypass '
-                    'the tunnel and use your normal connection.',
-            style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+                      'the tunnel and use your normal connection.',
+            style: TextStyle(
+              fontSize: 12.5.sp,
+              color: AppColors.textMuted,
+              height: 1.4,
+            ),
           ),
-          if (showReconnect) ...[
+          if (isReconnecting) ...[
             SizedBox(height: 10.h),
             Container(
               padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 10.h),
               decoration: BoxDecoration(
-                color: AppColors.warn.withValues(alpha: 0.10),
+                color: AppColors.accent.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12.r),
-                border: Border.all(color: AppColors.warn.withValues(alpha: 0.35)),
+                border: Border.all(
+                  color: AppColors.accent.withValues(alpha: 0.35),
+                ),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16.r, color: AppColors.warn),
+                  SizedBox(
+                    width: 14.r,
+                    height: 14.r,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.accent,
+                    ),
+                  ),
                   SizedBox(width: 10.w),
                   Expanded(
                     child: Text(
-                      'The tunnel is up. Disconnect and connect again for these '
-                      'changes to take effect.',
+                      'Applying changes — reconnecting the tunnel…',
                       style: TextStyle(
                         fontSize: 11.5.sp,
                         color: AppColors.textHigh,
@@ -231,7 +248,11 @@ class _NoApps extends StatelessWidget {
           'This device did not return a list of apps, so there is nothing to '
           'exclude. Split tunnelling is an Android feature; it does nothing here.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13.sp, color: AppColors.textMuted, height: 1.4),
+          style: TextStyle(
+            fontSize: 13.sp,
+            color: AppColors.textMuted,
+            height: 1.4,
+          ),
         ),
       ),
     );

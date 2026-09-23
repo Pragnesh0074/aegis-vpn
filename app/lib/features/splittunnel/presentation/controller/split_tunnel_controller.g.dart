@@ -65,34 +65,28 @@ String _$installedAppsHash() => r'd4dde20cc2b905ea6fed2fdcb2132a40de5d6160';
 
 /// The packages kept off the tunnel.
 ///
-/// Nothing is pushed to the platform here, and that is deliberate. An excluded
-/// set only takes effect when an interface is built, so this writes the
-/// preference and the next `connect` carries it — which also means a change made
-/// while the tunnel is up does nothing until it is rebuilt. The screen says so
-/// rather than silently reconnecting: dropping someone's tunnel because they
-/// ticked a checkbox is a worse surprise than a banner asking them to.
+/// An excluded set only takes effect when an interface is built, so this writes
+/// the preference and then rebuilds the tunnel automatically if one is live.
+/// Changes are debounced so that rapidly toggling several apps does not cycle
+/// the tunnel once per checkbox.
 
 @ProviderFor(ExcludedApps)
 final excludedAppsProvider = ExcludedAppsProvider._();
 
 /// The packages kept off the tunnel.
 ///
-/// Nothing is pushed to the platform here, and that is deliberate. An excluded
-/// set only takes effect when an interface is built, so this writes the
-/// preference and the next `connect` carries it — which also means a change made
-/// while the tunnel is up does nothing until it is rebuilt. The screen says so
-/// rather than silently reconnecting: dropping someone's tunnel because they
-/// ticked a checkbox is a worse surprise than a banner asking them to.
+/// An excluded set only takes effect when an interface is built, so this writes
+/// the preference and then rebuilds the tunnel automatically if one is live.
+/// Changes are debounced so that rapidly toggling several apps does not cycle
+/// the tunnel once per checkbox.
 final class ExcludedAppsProvider
     extends $AsyncNotifierProvider<ExcludedApps, Set<String>> {
   /// The packages kept off the tunnel.
   ///
-  /// Nothing is pushed to the platform here, and that is deliberate. An excluded
-  /// set only takes effect when an interface is built, so this writes the
-  /// preference and the next `connect` carries it — which also means a change made
-  /// while the tunnel is up does nothing until it is rebuilt. The screen says so
-  /// rather than silently reconnecting: dropping someone's tunnel because they
-  /// ticked a checkbox is a worse surprise than a banner asking them to.
+  /// An excluded set only takes effect when an interface is built, so this writes
+  /// the preference and then rebuilds the tunnel automatically if one is live.
+  /// Changes are debounced so that rapidly toggling several apps does not cycle
+  /// the tunnel once per checkbox.
   ExcludedAppsProvider._()
     : super(
         from: null,
@@ -112,16 +106,14 @@ final class ExcludedAppsProvider
   ExcludedApps create() => ExcludedApps();
 }
 
-String _$excludedAppsHash() => r'96f0af47e2b3f219d32995b74621b56292fbf486';
+String _$excludedAppsHash() => r'e7785775d6d8511f81d4838cdc4fb93da943dfc9';
 
 /// The packages kept off the tunnel.
 ///
-/// Nothing is pushed to the platform here, and that is deliberate. An excluded
-/// set only takes effect when an interface is built, so this writes the
-/// preference and the next `connect` carries it — which also means a change made
-/// while the tunnel is up does nothing until it is rebuilt. The screen says so
-/// rather than silently reconnecting: dropping someone's tunnel because they
-/// ticked a checkbox is a worse surprise than a banner asking them to.
+/// An excluded set only takes effect when an interface is built, so this writes
+/// the preference and then rebuilds the tunnel automatically if one is live.
+/// Changes are debounced so that rapidly toggling several apps does not cycle
+/// the tunnel once per checkbox.
 
 abstract class _$ExcludedApps extends $AsyncNotifier<Set<String>> {
   FutureOr<Set<String>> build();

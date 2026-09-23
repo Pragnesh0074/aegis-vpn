@@ -6,7 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
 import '../../profile/data/profile_repository.dart';
-import '../../profile/presentation/profile_providers.dart';
+import '../../profile/presentation/controller/profile_providers.dart';
 
 /// The paywall, and a DUMMY checkout behind it.
 ///
@@ -67,7 +67,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
           Text(
             'Subscribe to keep ad blocking, the kill switch and split tunnelling. '
             'The VPN itself stays free.',
-            style: TextStyle(fontSize: 13.sp, color: AppColors.textMuted, height: 1.4),
+            style: TextStyle(
+              fontSize: 13.sp,
+              color: AppColors.textMuted,
+              height: 1.4,
+            ),
           ),
           Gap.lg,
           for (final plan in _Plan.values)
@@ -100,7 +104,11 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
             child: Text(
               'DEMO — no payment is taken and no card is asked for. This button '
               'grants 30 days to anyone who taps it.',
-              style: TextStyle(fontSize: 11.5.sp, color: AppColors.warn, height: 1.35),
+              style: TextStyle(
+                fontSize: 11.5.sp,
+                color: AppColors.warn,
+                height: 1.35,
+              ),
             ),
           ),
           if (access?.subscribed ?? false) ...[
@@ -133,8 +141,18 @@ class _PaywallScreenState extends ConsumerState<PaywallScreen> {
 /// 30 days or 365 accordingly. A paywall that offers a year and quietly writes a
 /// month only reveals the disagreement in the database.
 enum _Plan {
-  monthly('monthly', 'Monthly', '₹149 / month', 'Billed every month. Cancel any time.'),
-  yearly('yearly', 'Yearly', '₹1,199 / year', 'Two months free compared with monthly.');
+  monthly(
+    'monthly',
+    'Monthly',
+    '₹149 / month',
+    'Billed every month. Cancel any time.',
+  ),
+  yearly(
+    'yearly',
+    'Yearly',
+    '₹1,199 / year',
+    'Two months free compared with monthly.',
+  );
 
   const _Plan(this.id, this.label, this.price, this.blurb);
 
@@ -147,7 +165,11 @@ enum _Plan {
 }
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.plan, required this.selected, required this.onTap});
+  const _PlanCard({
+    required this.plan,
+    required this.selected,
+    required this.onTap,
+  });
 
   final _Plan plan;
   final bool selected;
@@ -175,7 +197,9 @@ class _PlanCard extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  selected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
                   size: 19.r,
                   color: selected ? AppColors.accent : AppColors.textMuted,
                 ),
@@ -195,7 +219,10 @@ class _PlanCard extends StatelessWidget {
                       SizedBox(height: 2.h),
                       Text(
                         plan.blurb,
-                        style: TextStyle(fontSize: 11.5.sp, color: AppColors.textMuted),
+                        style: TextStyle(
+                          fontSize: 11.5.sp,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ],
                   ),

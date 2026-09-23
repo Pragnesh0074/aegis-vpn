@@ -6,10 +6,10 @@ import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/nodes/domain/node_ranking.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_location.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
-import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
-import 'package:aegis_vpn/features/nodes/presentation/selected_node.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/nodes_providers.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/selected_node.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_config_store.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/vpn_session.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/vpn_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,23 +23,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   VpnNode node(String id, {bool healthy = true, double load = 0.1}) => VpnNode(
-        id: id,
-        name: id,
-        region: id == 'frankfurt' ? 'de-frankfurt' : 'in-mumbai',
-        load: load,
-        available: healthy,
-        healthy: healthy,
-      );
+    id: id,
+    name: id,
+    region: id == 'frankfurt' ? 'de-frankfurt' : 'in-mumbai',
+    load: load,
+    available: healthy,
+    healthy: healthy,
+  );
 
   Device device(String nodeId) => Device(
-        id: 'd1',
-        name: 'Pixel 9',
-        platform: 'android',
-        tunnelIp: '10.8.0.2/32',
-        createdAt: DateTime.utc(2026),
-        lastSeenAt: null,
-        node: DeviceNode(id: nodeId, name: nodeId, region: 'in-mumbai'),
-      );
+    id: 'd1',
+    name: 'Pixel 9',
+    platform: 'android',
+    tunnelIp: '10.8.0.2/32',
+    createdAt: DateTime.utc(2026),
+    lastSeenAt: null,
+    node: DeviceNode(id: nodeId, name: nodeId, region: 'in-mumbai'),
+  );
 
   late _RecordingDevices repository;
 
@@ -75,9 +75,16 @@ void main() {
 
   /// Makes [existing] look like a peer this install can actually drive, which is
   /// what stops `provisionedDevice` treating it as an orphan to be replaced.
-  Future<void> seedLocalHalves(ProviderContainer container, Device device) async {
-    await container.read(deviceKeyStoreProvider).save(device.id, 'a-private-key');
-    await container.read(tunnelConfigStoreProvider).save(
+  Future<void> seedLocalHalves(
+    ProviderContainer container,
+    Device device,
+  ) async {
+    await container
+        .read(deviceKeyStoreProvider)
+        .save(device.id, 'a-private-key');
+    await container
+        .read(tunnelConfigStoreProvider)
+        .save(
           DeviceConfig(
             deviceId: device.id,
             name: device.name,
@@ -138,7 +145,11 @@ void main() {
     // Revoking a working peer because `GET /nodes` timed out would be the app
     // causing the very outage it was trying to route around.
     final existing = device('mumbai');
-    final container = harness(existing: [existing], fleet: const [], fleetFails: true);
+    final container = harness(
+      existing: [existing],
+      fleet: const [],
+      fleetFails: true,
+    );
     await seedLocalHalves(container, existing);
 
     await container.read(vpnSessionProvider.notifier).connect();
@@ -149,10 +160,10 @@ void main() {
 
   group('the fleet view', () {
     test('an unreachable node is never what automatic picks', () {
-      final ranked = NodeRanking.nearest(
-        [node('mumbai', healthy: false), node('frankfurt')],
-        utcOffset: const Duration(hours: 5, minutes: 30),
-      );
+      final ranked = NodeRanking.nearest([
+        node('mumbai', healthy: false),
+        node('frankfurt'),
+      ], utcOffset: const Duration(hours: 5, minutes: 30));
 
       // Mumbai is nearer and would win on geography alone.
       expect(ranked?.id, 'frankfurt');
@@ -199,7 +210,11 @@ class _RecordingDevices implements DevicesRepository {
     created++;
     lastNodeId = nodeId;
     final id = 'created-$created';
-    final node = DeviceNode(id: nodeId ?? 'n1', name: nodeId ?? 'n1', region: 'in-mumbai');
+    final node = DeviceNode(
+      id: nodeId ?? 'n1',
+      name: nodeId ?? 'n1',
+      region: 'in-mumbai',
+    );
     live.add(
       Device(
         id: id,

@@ -6,9 +6,9 @@ import '../support/test_harness.dart';
 
 void main() {
   group('KillSwitchStore', () {
-    test('defaults to off when nothing was ever chosen', () async {
-      // Arming it unasked would rebuild tunnels a user deliberately dropped.
-      expect(await KillSwitchStore(InMemorySecureStore()).read(), isFalse);
+    test('defaults to on when nothing was ever chosen', () async {
+      // Rebuilds dropped tunnels automatically to protect the connection.
+      expect(await KillSwitchStore(InMemorySecureStore()).read(), isTrue);
     });
 
     test('survives a restart, because silently disarming is the worst outcome',

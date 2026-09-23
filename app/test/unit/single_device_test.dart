@@ -2,9 +2,9 @@ import 'package:aegis_vpn/features/devices/data/devices_repository.dart';
 import 'package:aegis_vpn/features/devices/domain/device.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
-import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
-import 'package:aegis_vpn/features/nodes/presentation/selected_node.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/vpn_session.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/nodes_providers.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/selected_node.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/vpn_session.dart';
 import 'package:aegis_vpn/core/storage/secure_store.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -55,29 +55,35 @@ void main() {
     expect(repository.revoked, isEmpty);
   });
 
-  test('connecting again reuses the peer rather than issuing another', () async {
-    final container = containerWith([]);
-    final session = container.read(vpnSessionProvider.notifier);
+  test(
+    'connecting again reuses the peer rather than issuing another',
+    () async {
+      final container = containerWith([]);
+      final session = container.read(vpnSessionProvider.notifier);
 
-    await session.connect();
-    await session.connect();
+      await session.connect();
+      await session.connect();
 
-    expect(repository.created, 1, reason: 'the second connect must reuse');
-    expect(repository.revoked, isEmpty);
-  });
+      expect(repository.created, 1, reason: 'the second connect must reuse');
+      expect(repository.revoked, isEmpty);
+    },
+  );
 
-  test('a peer this install cannot drive is revoked, not left behind', () async {
-    // The shape an uninstall leaves: the account still has the peer, but the
-    // private key that made it usable went with the app data.
-    final orphan = _device('11111111-1111-4111-8111-111111111111');
-    final container = containerWith([orphan]);
+  test(
+    'a peer this install cannot drive is revoked, not left behind',
+    () async {
+      // The shape an uninstall leaves: the account still has the peer, but the
+      // private key that made it usable went with the app data.
+      final orphan = _device('11111111-1111-4111-8111-111111111111');
+      final container = containerWith([orphan]);
 
-    await container.read(vpnSessionProvider.notifier).connect();
+      await container.read(vpnSessionProvider.notifier).connect();
 
-    expect(repository.revoked, [orphan.id], reason: 'the stale peer must go');
-    expect(repository.created, 1);
-    expect(repository.live.length, 1, reason: 'exactly one peer survives');
-  });
+      expect(repository.revoked, [orphan.id], reason: 'the stale peer must go');
+      expect(repository.created, 1);
+      expect(repository.live.length, 1, reason: 'exactly one peer survives');
+    },
+  );
 
   test('a revoke the server rejects still lets the connect through', () async {
     final stuck = _device('22222222-2222-4222-8222-222222222222');
@@ -104,14 +110,14 @@ const _fleet = [
 ];
 
 Device _device(String id) => Device(
-      id: id,
-      name: 'Android · aaaa',
-      platform: 'android',
-      tunnelIp: '10.8.0.2/32',
-      createdAt: DateTime.utc(2026),
-      lastSeenAt: null,
-      node: const DeviceNode(id: 'n1', name: 'Mumbai #1', region: 'in-mumbai'),
-    );
+  id: id,
+  name: 'Android · aaaa',
+  platform: 'android',
+  tunnelIp: '10.8.0.2/32',
+  createdAt: DateTime.utc(2026),
+  lastSeenAt: null,
+  node: const DeviceNode(id: 'n1', name: 'Mumbai #1', region: 'in-mumbai'),
+);
 
 class _AutomaticNode extends SelectedNodeId {
   @override

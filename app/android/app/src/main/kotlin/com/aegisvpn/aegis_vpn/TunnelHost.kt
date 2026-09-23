@@ -144,7 +144,7 @@ object TunnelHost {
      * VPN settings, which no app may enable for itself.
      */
     @Volatile
-    var killSwitch = false
+    var killSwitch = true
         private set
 
     /** True while the current teardown was asked for, so it is not undone. */

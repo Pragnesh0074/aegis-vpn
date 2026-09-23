@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:aegis_vpn/features/profile/data/profile_repository.dart';
 import 'package:aegis_vpn/features/profile/domain/user_profile.dart';
-import 'package:aegis_vpn/features/profile/presentation/profile_providers.dart';
+import 'package:aegis_vpn/features/profile/presentation/controller/profile_providers.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,8 +35,9 @@ void main() {
   // lock on each setting. Holding the old profile while the new one lands makes
   // the page rewrite itself piece by piece, which reads as flicker, so this
   // screen asks for the loader that other screens deliberately skip.
-  testWidgets('shows a loader while refetching, not the stale profile',
-      (tester) async {
+  testWidgets('shows a loader while refetching, not the stale profile', (
+    tester,
+  ) async {
     final repo = _GatedRepository();
     await pumpScreen(
       tester,
@@ -71,20 +72,20 @@ void main() {
 }
 
 UserProfile _profile(String email) => UserProfile(
-      id: 'u1',
-      email: email,
-      createdAt: DateTime.utc(2026),
-      deviceCount: 1,
-      maxDevices: 5,
-      adBlockEnabled: true,
-      adBlockEntitled: true,
-      access: const AccessState(
-        entitled: true,
-        onTrial: true,
-        subscribed: false,
-        remaining: Duration(hours: 5),
-      ),
-    );
+  id: 'u1',
+  email: email,
+  createdAt: DateTime.utc(2026),
+  deviceCount: 1,
+  maxDevices: 5,
+  adBlockEnabled: true,
+  adBlockEntitled: true,
+  access: const AccessState(
+    entitled: true,
+    onTrial: true,
+    subscribed: false,
+    remaining: Duration(hours: 5),
+  ),
+);
 
 class _CountingRepository implements ProfileRepository {
   int calls = 0;
@@ -112,7 +113,9 @@ class _GatedRepository implements ProfileRepository {
   void release() {
     for (final c in _pending) {
       if (!c.isCompleted) {
-        c.complete(_profile(calls == 1 ? 'first@example.com' : 'second@example.com'));
+        c.complete(
+          _profile(calls == 1 ? 'first@example.com' : 'second@example.com'),
+        );
       }
     }
     _pending.clear();

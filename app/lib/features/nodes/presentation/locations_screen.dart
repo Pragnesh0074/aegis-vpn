@@ -8,10 +8,10 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
-import '../../tunnel/presentation/vpn_session.dart';
+import '../../tunnel/presentation/controller/vpn_session.dart';
 import '../domain/node_ranking.dart';
-import 'nodes_providers.dart';
-import 'selected_node.dart';
+import 'controller/nodes_providers.dart';
+import 'controller/selected_node.dart';
 import 'widgets/location_tile.dart';
 
 /// `GET /nodes`, read as a list of countries to appear from.
@@ -23,14 +23,23 @@ import 'widgets/location_tile.dart';
 class LocationsScreen extends ConsumerWidget {
   const LocationsScreen({super.key});
 
-  Future<void> _select(BuildContext context, WidgetRef ref, String? nodeId) async {
-    final ok = await ref.read(vpnSessionProvider.notifier).selectLocation(nodeId);
+  Future<void> _select(
+    BuildContext context,
+    WidgetRef ref,
+    String? nodeId,
+  ) async {
+    final ok = await ref
+        .read(vpnSessionProvider.notifier)
+        .selectLocation(nodeId);
     if (!context.mounted) return;
 
     if (!ok) {
       final error = ref.read(vpnSessionProvider).error;
-      showMessage(context, error == null ? 'Could not switch location' : describeError(error),
-          isError: true);
+      showMessage(
+        context,
+        error == null ? 'Could not switch location' : describeError(error),
+        isError: true,
+      );
       return;
     }
     // Back to the button, which is where the effect of the choice is visible.
@@ -87,7 +96,8 @@ class LocationsScreen extends ConsumerWidget {
                 for (final location in list)
                   LocationTile(
                     location: location,
-                    selected: selectedId != null &&
+                    selected:
+                        selectedId != null &&
                         location.nodes.any((node) => node.id == selectedId),
                     onTap: busy
                         ? null
@@ -120,7 +130,9 @@ class _AutomaticTile extends ConsumerWidget {
     final nearest = ref.watch(nearestNodeProvider).value;
 
     return Material(
-      color: selected ? AppColors.accent.withValues(alpha: 0.08) : AppColors.surface,
+      color: selected
+          ? AppColors.accent.withValues(alpha: 0.08)
+          : AppColors.surface,
       borderRadius: BorderRadius.circular(16.r),
       child: InkWell(
         onTap: onTap,
@@ -145,7 +157,11 @@ class _AutomaticTile extends ConsumerWidget {
                   color: AppColors.accent.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12.r),
                 ),
-                child: Icon(Icons.bolt_rounded, size: 21.r, color: AppColors.accent),
+                child: Icon(
+                  Icons.bolt_rounded,
+                  size: 21.r,
+                  color: AppColors.accent,
+                ),
               ),
               SizedBox(width: 13.w),
               Expanded(
@@ -165,19 +181,30 @@ class _AutomaticTile extends ConsumerWidget {
                       nearest == null
                           ? 'Chosen by the server'
                           : '${nearest.name} · '
-                              '${Format.percent(nearest.load.clamp(0, 1))} load',
+                                '${Format.percent(nearest.load.clamp(0, 1))} load',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11.5.sp, color: AppColors.textMuted),
+                      style: TextStyle(
+                        fontSize: 11.5.sp,
+                        color: AppColors.textMuted,
+                      ),
                     ),
                   ],
                 ),
               ),
               SizedBox(width: 8.w),
               if (selected)
-                Icon(Icons.check_circle_rounded, size: 20.r, color: AppColors.accent)
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 20.r,
+                  color: AppColors.accent,
+                )
               else
-                Icon(Icons.chevron_right, size: 20.r, color: AppColors.textMuted),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20.r,
+                  color: AppColors.textMuted,
+                ),
             ],
           ),
         ),
@@ -202,7 +229,11 @@ class _AutomaticCaption extends StatelessWidget {
       child: Text(
         'Estimated from your time zone, not measured. Pick a country below to '
         'override it.',
-        style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, height: 1.35),
+        style: TextStyle(
+          fontSize: 11.sp,
+          color: AppColors.textMuted,
+          height: 1.35,
+        ),
       ),
     );
   }

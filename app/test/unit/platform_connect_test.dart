@@ -5,8 +5,8 @@ import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/splittunnel/domain/installed_app.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/platform_connect_watcher.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/vpn_session.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/platform_connect_watcher.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/vpn_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -2,19 +2,19 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/app_exception.dart';
-import '../../../core/error/failure_log.dart';
-import '../../devices/data/device_key_store.dart';
-import '../../devices/data/devices_repository.dart';
-import '../../devices/data/wireguard_keygen.dart';
-import '../../devices/domain/device.dart';
-import '../../devices/domain/device_config.dart';
-import '../../devices/presentation/devices_providers.dart';
-import '../../nodes/presentation/nodes_providers.dart';
-import '../../nodes/presentation/selected_node.dart';
-import '../../profile/presentation/profile_providers.dart';
-import '../data/tunnel_channel.dart';
-import '../data/tunnel_config_store.dart';
+import '../../../../core/error/app_exception.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../../devices/data/device_key_store.dart';
+import '../../../devices/data/devices_repository.dart';
+import '../../../devices/data/wireguard_keygen.dart';
+import '../../../devices/domain/device.dart';
+import '../../../devices/domain/device_config.dart';
+import '../../../devices/presentation/controller/devices_providers.dart';
+import '../../../nodes/presentation/controller/nodes_providers.dart';
+import '../../../nodes/presentation/controller/selected_node.dart';
+import '../../../profile/presentation/controller/profile_providers.dart';
+import '../../data/tunnel_channel.dart';
+import '../../data/tunnel_config_store.dart';
 import 'tunnel_controller.dart';
 
 part 'vpn_session.g.dart';
@@ -320,7 +320,9 @@ class VpnSession extends _$VpnSession {
     final keys = await ref.read(wireguardKeygenProvider).generate();
     final platform = ref.read(currentPlatformProvider);
 
-    final config = await ref.read(devicesRepositoryProvider).create(
+    final config = await ref
+        .read(devicesRepositoryProvider)
+        .create(
           publicKey: keys.publicKey,
           name: _autoName(platform, keys.publicKey),
           platform: platform.wireValue,
@@ -328,7 +330,9 @@ class VpnSession extends _$VpnSession {
         );
 
     try {
-      await ref.read(deviceKeyStoreProvider).save(config.deviceId, keys.privateKey);
+      await ref
+          .read(deviceKeyStoreProvider)
+          .save(config.deviceId, keys.privateKey);
       // `POST /devices` is the only call that returns the node's public key and
       // endpoint, so this cache is the difference between a tunnel that can be
       // restarted and one that can never be built again.

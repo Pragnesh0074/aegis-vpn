@@ -8,7 +8,7 @@ import '../../../core/widgets/async_view.dart';
 import '../../nodes/domain/region_geo.dart';
 import '../data/session_history_store.dart';
 import '../domain/vpn_session_record.dart';
-import 'session_recorder.dart';
+import 'controller/session_recorder.dart';
 
 /// Where the tunnel has been, and for how long.
 ///
@@ -95,7 +95,10 @@ class _Summary extends StatelessWidget {
       Duration.zero,
       (sum, session) => sum + session.duration,
     );
-    final bytes = sessions.fold<int>(0, (sum, session) => sum + session.totalBytes);
+    final bytes = sessions.fold<int>(
+      0,
+      (sum, session) => sum + session.totalBytes,
+    );
 
     return Container(
       padding: EdgeInsets.all(16.r),
@@ -111,10 +114,7 @@ class _Summary extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _Stat(
-                  label: 'Sessions',
-                  value: '${sessions.length}',
-                ),
+                child: _Stat(label: 'Sessions', value: '${sessions.length}'),
               ),
               Expanded(
                 child: _Stat(
@@ -123,7 +123,10 @@ class _Summary extends StatelessWidget {
                 ),
               ),
               Expanded(
-                child: _Stat(label: 'Through the tunnel', value: Format.bytes(bytes)),
+                child: _Stat(
+                  label: 'Through the tunnel',
+                  value: Format.bytes(bytes),
+                ),
               ),
             ],
           ),
@@ -131,7 +134,11 @@ class _Summary extends StatelessWidget {
           Text(
             'Kept on this device only, for the last ${SessionHistoryStore.limit} '
             'sessions. Nothing here is sent to the server.',
-            style: TextStyle(fontSize: 11.sp, color: AppColors.textMuted, height: 1.35),
+            style: TextStyle(
+              fontSize: 11.sp,
+              color: AppColors.textMuted,
+              height: 1.35,
+            ),
           ),
         ],
       ),
@@ -178,7 +185,9 @@ class _SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final geo = session.region == null ? null : RegionGeo.parse(session.region!);
+    final geo = session.region == null
+        ? null
+        : RegionGeo.parse(session.region!);
     final flag = geo?.flag;
 
     return Container(
@@ -190,10 +199,7 @@ class _SessionTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
-            flag ?? '🌐',
-            style: TextStyle(fontSize: 20.sp),
-          ),
+          Text(flag ?? '🌐', style: TextStyle(fontSize: 20.sp)),
           SizedBox(width: 12.w),
           Expanded(
             child: Column(
@@ -263,7 +269,11 @@ class _NoSessions extends StatelessWidget {
               'No sessions yet. Each time you connect and disconnect, the tunnel '
               'is recorded here — on this device only.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13.sp, color: AppColors.textMuted, height: 1.4),
+              style: TextStyle(
+                fontSize: 13.sp,
+                color: AppColors.textMuted,
+                height: 1.4,
+              ),
             ),
           ],
         ),

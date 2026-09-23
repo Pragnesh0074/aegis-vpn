@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/failure_log.dart';
-import '../data/tunnel_channel.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../data/tunnel_channel.dart';
 import 'vpn_session.dart';
 
 part 'platform_connect_watcher.g.dart';

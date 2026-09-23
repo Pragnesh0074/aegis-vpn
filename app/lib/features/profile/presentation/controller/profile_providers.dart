@@ -1,7 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../data/profile_repository.dart';
-import '../domain/user_profile.dart';
+import '../../data/profile_repository.dart';
+import '../../domain/user_profile.dart';
 
 part 'profile_providers.g.dart';
 

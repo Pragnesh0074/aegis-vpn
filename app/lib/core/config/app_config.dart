@@ -36,7 +36,7 @@ class AppConfig {
   /// EC2 host changes it and this constant has to be edited and the app rebuilt.
   /// That is understood and accepted for the MVP; the fix is an Elastic IP, or a
   /// domain, either of which makes this value stable.
-  static const _defaultBaseUrl = 'http://65.2.69.145:3000';
+  static const _defaultBaseUrl = 'http://13.201.76.135:3000';
 
   factory AppConfig.fromEnvironment() {
     return const AppConfig(

@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/async_view.dart';
-import '../health_providers.dart';
+import '../controller/health_providers.dart';
 
 /// `GET /health` — API and database reachability.
 class HealthCard extends ConsumerWidget {
@@ -24,7 +24,9 @@ class HealthCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('API status', style: theme.textTheme.titleSmall)),
+                Expanded(
+                  child: Text('API status', style: theme.textTheme.titleSmall),
+                ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   iconSize: 18.r,
@@ -36,31 +38,31 @@ class HealthCard extends ConsumerWidget {
             ),
             switch (health) {
               AsyncLoading() => Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.h),
-                  child: LinearProgressIndicator(minHeight: 3.h),
-                ),
+                padding: EdgeInsets.symmetric(vertical: 8.h),
+                child: LinearProgressIndicator(minHeight: 3.h),
+              ),
               // A failure here is the expected shape when the API is down — show
               // it as a status line, not as a full error page.
               AsyncError(:final error) => _StatusLine(
-                  label: describeError(error),
-                  healthy: false,
-                ),
+                label: describeError(error),
+                healthy: false,
+              ),
               AsyncValue(:final value?) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _StatusLine(
-                      label: value.isHealthy ? 'Operational' : 'Degraded',
-                      healthy: value.isHealthy,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _StatusLine(
+                    label: value.isHealthy ? 'Operational' : 'Degraded',
+                    healthy: value.isHealthy,
+                  ),
+                  Text(
+                    'Database ${value.database} · '
+                    'up ${Format.duration(value.uptimeSeconds)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
-                    Text(
-                      'Database ${value.database} · '
-                      'up ${Format.duration(value.uptimeSeconds)}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
             },
           ],
         ),

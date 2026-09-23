@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/failure_log.dart';
-import '../../tunnel/data/tunnel_channel.dart';
-import '../../tunnel/data/tunnel_config_store.dart';
-import '../../tunnel/domain/tunnel_status.dart';
-import '../data/session_history_store.dart';
-import '../domain/vpn_session_record.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../../tunnel/data/tunnel_channel.dart';
+import '../../../tunnel/data/tunnel_config_store.dart';
+import '../../../tunnel/domain/tunnel_status.dart';
+import '../../data/session_history_store.dart';
+import '../../domain/vpn_session_record.dart';
 
 part 'session_recorder.g.dart';
 
@@ -80,13 +80,17 @@ class SessionRecorder extends _$SessionRecorder {
     final deviceId = status.deviceId;
     if (deviceId != null) {
       unawaited(
-        ref.read(tunnelConfigStoreProvider).read(deviceId).then((config) {
-          if (config == null) return;
-          session.nodeName = config.node.name;
-          session.region = config.node.region;
-        }).catchError((Object error, StackTrace stack) {
-          logFailure('reading the session node', error, stack);
-        }),
+        ref
+            .read(tunnelConfigStoreProvider)
+            .read(deviceId)
+            .then((config) {
+              if (config == null) return;
+              session.nodeName = config.node.name;
+              session.region = config.node.region;
+            })
+            .catchError((Object error, StackTrace stack) {
+              logFailure('reading the session node', error, stack);
+            }),
       );
     }
 
@@ -102,13 +106,17 @@ class SessionRecorder extends _$SessionRecorder {
     if (record == null) return;
 
     unawaited(
-      ref.read(sessionHistoryStoreProvider).add(record).then((_) {
-        ref.invalidate(sessionHistoryProvider);
-      }).catchError((Object error, StackTrace stack) {
-        // Losing a history row is not worth surfacing to someone who was only
-        // trying to disconnect.
-        logFailure('recording the session', error, stack);
-      }),
+      ref
+          .read(sessionHistoryStoreProvider)
+          .add(record)
+          .then((_) {
+            ref.invalidate(sessionHistoryProvider);
+          })
+          .catchError((Object error, StackTrace stack) {
+            // Losing a history row is not worth surfacing to someone who was only
+            // trying to disconnect.
+            logFailure('recording the session', error, stack);
+          }),
     );
   }
 }

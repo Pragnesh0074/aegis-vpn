@@ -11,9 +11,9 @@ import '../../../core/widgets/async_view.dart';
 import '../../nodes/presentation/widgets/location_summary_card.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import '../../tunnel/domain/tunnel_status.dart';
-import '../../tunnel/presentation/tunnel_controller.dart';
-import '../../tunnel/presentation/tunnel_metrics.dart';
-import '../../tunnel/presentation/vpn_session.dart';
+import '../../tunnel/presentation/controller/tunnel_controller.dart';
+import '../../tunnel/presentation/controller/tunnel_metrics.dart';
+import '../../tunnel/presentation/controller/vpn_session.dart';
 import '../../tunnel/presentation/widgets/connect_orb.dart';
 import '../../tunnel/presentation/widgets/throughput_panel.dart';
 import '../../whoami/presentation/widgets/exit_check_card.dart';
@@ -29,7 +29,9 @@ class ConnectScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(tunnelStatusStreamProvider).value ?? TunnelStatus.disconnected;
+    final status =
+        ref.watch(tunnelStatusStreamProvider).value ??
+        TunnelStatus.disconnected;
     final provisioning = ref.watch(vpnSessionProvider);
     final command = ref.watch(tunnelControllerProvider);
     final uptime = ref.watch(tunnelUptimeProvider);
@@ -77,7 +79,8 @@ class ConnectScreen extends ConsumerWidget {
                         ConnectOrb(
                           phase: phase,
                           enabled: !busy && !status.state.isBusy,
-                          onTap: () => ref.read(vpnSessionProvider.notifier).toggle(),
+                          onTap: () =>
+                              ref.read(vpnSessionProvider.notifier).toggle(),
                         ),
                         SizedBox(height: 18.h),
                         _Headline(phase: phase),
@@ -144,7 +147,8 @@ class ConnectScreen extends ConsumerWidget {
     required Duration upFor,
   }) {
     return switch (status.state) {
-      TunnelState.connected when status.stats.isPeerResponding => OrbPhase.protected,
+      TunnelState.connected when status.stats.isPeerResponding =>
+        OrbPhase.protected,
       TunnelState.connected when upFor < _handshakeGrace => OrbPhase.connecting,
       TunnelState.connected => OrbPhase.unverified,
       TunnelState.connecting => OrbPhase.connecting,
@@ -243,7 +247,9 @@ class _StatePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showClock = isUp;
-    final tint = phase == OrbPhase.unverified ? AppColors.warn : AppColors.accent;
+    final tint = phase == OrbPhase.unverified
+        ? AppColors.warn
+        : AppColors.accent;
 
     return AnimatedOpacity(
       opacity: showClock ? 1 : 0.35,
@@ -389,7 +395,11 @@ class _Detail extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 13.sp, color: AppColors.textMuted, height: 1.3),
+        style: TextStyle(
+          fontSize: 13.sp,
+          color: AppColors.textMuted,
+          height: 1.3,
+        ),
       ),
     );
   }
@@ -418,7 +428,11 @@ class _Failure extends StatelessWidget {
           Expanded(
             child: Text(
               _message(error),
-              style: TextStyle(fontSize: 12.5.sp, color: AppColors.textHigh, height: 1.35),
+              style: TextStyle(
+                fontSize: 12.5.sp,
+                color: AppColors.textHigh,
+                height: 1.35,
+              ),
             ),
           ),
         ],

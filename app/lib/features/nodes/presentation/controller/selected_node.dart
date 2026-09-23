@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../data/node_selection_store.dart';
-import '../domain/node_ranking.dart';
-import '../domain/region_geo.dart';
-import '../domain/vpn_node.dart';
+import '../../data/node_selection_store.dart';
+import '../../domain/node_ranking.dart';
+import '../../domain/region_geo.dart';
+import '../../domain/vpn_node.dart';
 import 'nodes_providers.dart';
 
 part 'selected_node.g.dart';
@@ -73,7 +73,10 @@ Duration deviceUtcOffset(Ref ref) => DateTime.now().timeZoneOffset;
 @riverpod
 Future<VpnNode?> nearestNode(Ref ref) async {
   final nodes = await ref.watch(vpnNodesProvider.future);
-  return NodeRanking.nearest(nodes, utcOffset: ref.watch(deviceUtcOffsetProvider));
+  return NodeRanking.nearest(
+    nodes,
+    utcOffset: ref.watch(deviceUtcOffsetProvider),
+  );
 }
 
 /// The location line the connect screen headlines, resolved for either mode.

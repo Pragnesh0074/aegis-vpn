@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
-import 'auth_controller.dart';
+import 'controller/auth_controller.dart';
 import 'widgets/auth_form_scaffold.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -32,10 +32,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(authControllerProvider.notifier).login(
-          email: _email.text,
-          password: _password.text,
-        );
+    await ref
+        .read(authControllerProvider.notifier)
+        .login(email: _email.text, password: _password.text);
   }
 
   @override
@@ -90,7 +89,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         Gap.sm,
         TextButton(
-          onPressed: state.isLoading ? null : () => context.go(AppRoutes.register),
+          onPressed: state.isLoading
+              ? null
+              : () => context.go(AppRoutes.register),
           child: const Text('Create an account'),
         ),
       ],

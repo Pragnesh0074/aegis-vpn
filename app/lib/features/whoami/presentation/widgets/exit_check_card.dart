@@ -4,7 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../domain/exit_check.dart';
-import '../exit_check_providers.dart';
+import '../controller/exit_check_providers.dart';
 
 /// Proof, rather than a claim.
 ///
@@ -34,25 +34,25 @@ class ExitCheckCard extends ConsumerWidget {
       ),
       child: switch (check) {
         AsyncLoading() => const _Row(
-            icon: Icons.travel_explore,
-            tint: AppColors.textMuted,
-            title: 'Checking where you appear…',
-          ),
+          icon: Icons.travel_explore,
+          tint: AppColors.textMuted,
+          title: 'Checking where you appear…',
+        ),
         // Not a blocker and not an alarm: failing to reach the API says nothing
         // about whether the tunnel is working, and dressing it up as a leak
         // would be its own kind of lie.
         AsyncError() => _Row(
-            icon: Icons.help_outline,
-            tint: AppColors.textMuted,
-            title: 'Could not check your exit address',
-            subtitle: 'The API was unreachable.',
-            onRetry: () => ref.invalidate(exitCheckProvider),
-          ),
+          icon: Icons.help_outline,
+          tint: AppColors.textMuted,
+          title: 'Could not check your exit address',
+          subtitle: 'The API was unreachable.',
+          onRetry: () => ref.invalidate(exitCheckProvider),
+        ),
         AsyncValue(value: final result?) => _Result(
-            result: result,
-            carrying: carrying,
-            onRetry: () => ref.invalidate(exitCheckProvider),
-          ),
+          result: result,
+          carrying: carrying,
+          onRetry: () => ref.invalidate(exitCheckProvider),
+        ),
       },
     );
   }
@@ -151,7 +151,9 @@ class _Row extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
-                  color: tint == AppColors.textMuted ? AppColors.textHigh : tint,
+                  color: tint == AppColors.textMuted
+                      ? AppColors.textHigh
+                      : tint,
                 ),
               ),
               if (subtitle != null) ...[
@@ -160,7 +162,10 @@ class _Row extends StatelessWidget {
                   subtitle,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5.sp, color: AppColors.textMuted),
+                  style: TextStyle(
+                    fontSize: 11.5.sp,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ],

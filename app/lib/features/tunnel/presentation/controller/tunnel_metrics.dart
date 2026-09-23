@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../data/tunnel_channel.dart';
-import '../domain/tunnel_status.dart';
+import '../../data/tunnel_channel.dart';
+import '../../domain/tunnel_status.dart';
 
 part 'tunnel_metrics.g.dart';
 

@@ -8,13 +8,12 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
-import '../../auth/presentation/auth_controller.dart';
-import '../../killswitch/presentation/ad_block_controller.dart';
-import '../../killswitch/presentation/kill_switch_controller.dart';
-import '../../splittunnel/presentation/split_tunnel_controller.dart';
+import '../../auth/presentation/controller/auth_controller.dart';
+import '../../killswitch/presentation/controller/ad_block_controller.dart';
+import '../../splittunnel/presentation/controller/split_tunnel_controller.dart';
 import '../../tunnel/data/tunnel_channel.dart';
 import '../domain/user_profile.dart';
-import 'profile_providers.dart';
+import 'controller/profile_providers.dart';
 import 'widgets/settings_tile.dart';
 
 /// The account page: who you are, every setting, and the way out.
@@ -75,18 +74,26 @@ class ProfileScreen extends ConsumerWidget {
 class _PrivacyGroup extends ConsumerWidget {
   const _PrivacyGroup();
 
-  Future<void> _toggle(BuildContext context, WidgetRef ref, bool enabled) async {
+  Future<void> _toggle(
+    BuildContext context,
+    WidgetRef ref,
+    bool enabled,
+  ) async {
     try {
-      await ref.read(adBlockControllerProvider.notifier).setEnabled(enabled: enabled);
+      await ref
+          .read(adBlockControllerProvider.notifier)
+          .setEnabled(enabled: enabled);
     } catch (error) {
-      if (context.mounted) showMessage(context, describeError(error), isError: true);
+      if (context.mounted)
+        showMessage(context, describeError(error), isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setting = ref.watch(adBlockControllerProvider);
-    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
+    final entitled =
+        ref.watch(userProfileProvider).value?.access.entitled ?? false;
     final enabled = (setting.value ?? false) && entitled;
 
     return SettingsGroup(
@@ -102,14 +109,16 @@ class _PrivacyGroup extends ConsumerWidget {
                   value: enabled,
                   // Nothing to toggle until the profile has loaded; moving it
                   // early would write a preference nobody has read.
-                  onChanged:
-                      setting.isLoading ? null : (v) => _toggle(context, ref, v),
+                  onChanged: setting.isLoading
+                      ? null
+                      : (v) => _toggle(context, ref, v),
                 )
               : const _LockedChip(),
           onTap: entitled ? null : () => context.go(AppRoutes.paywall),
           footer: enabled
               ? const SettingsNote(
-                  text: 'Ads inside YouTube, Instagram and TikTok still show — they '
+                  text:
+                      'Ads inside YouTube, Instagram and TikTok still show — they '
                       'come from the same address as the content.',
                 )
               : null,
@@ -126,16 +135,18 @@ class _SplitTunnelTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final excluded = ref.watch(excludedAppsProvider).value?.length ?? 0;
-    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
+    final entitled =
+        ref.watch(userProfileProvider).value?.access.entitled ?? false;
     return SettingsTile(
       label: 'Split Tunnel',
       description: !entitled
           ? 'Subscribe to keep chosen apps off the VPN.'
           : excluded == 0
-              ? 'All apps go through the VPN.'
-              : '$excluded app${excluded == 1 ? '' : 's'} bypass the VPN.',
+          ? 'All apps go through the VPN.'
+          : '$excluded app${excluded == 1 ? '' : 's'} bypass the VPN.',
       control: entitled ? null : const _LockedChip(),
-      onTap: () => context.go(entitled ? AppRoutes.splitTunnel : AppRoutes.paywall),
+      onTap: () =>
+          context.go(entitled ? AppRoutes.splitTunnel : AppRoutes.paywall),
     );
   }
 }
@@ -178,22 +189,22 @@ class _AccessCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final (title, body, tint) = switch (access) {
       AccessState(subscribed: true) => (
-          'Premium active',
-          'Ad blocking, auto-reconnect and split tunnelling are yours.',
-          AppColors.accent,
-        ),
+        'Premium active',
+        'Ad blocking, auto-reconnect and split tunnelling are yours.',
+        AppColors.accent,
+      ),
       AccessState(onTrial: true) => (
-          'Free trial — ${access.hoursLeft}h left',
-          'Everything is unlocked until then. After that the VPN stays free and '
-              'the extras need a subscription.',
-          AppColors.accent,
-        ),
+        'Free trial — ${access.hoursLeft}h left',
+        'Everything is unlocked until then. After that the VPN stays free and '
+            'the extras need a subscription.',
+        AppColors.accent,
+      ),
       _ => (
-          'Trial ended',
-          'The VPN still works. Ad blocking, auto-reconnect and split tunnelling '
-              'need a subscription.',
-          AppColors.warn,
-        ),
+        'Trial ended',
+        'The VPN still works. Ad blocking, auto-reconnect and split tunnelling '
+            'need a subscription.',
+        AppColors.warn,
+      ),
     };
 
     return Container(
@@ -217,7 +228,11 @@ class _AccessCard extends StatelessWidget {
           SizedBox(height: 4.h),
           Text(
             body,
-            style: TextStyle(fontSize: 12.5.sp, color: AppColors.textMuted, height: 1.4),
+            style: TextStyle(
+              fontSize: 12.5.sp,
+              color: AppColors.textMuted,
+              height: 1.4,
+            ),
           ),
           if (!access.subscribed) ...[
             SizedBox(height: 12.h),
@@ -245,26 +260,22 @@ class _ConnectionGroup extends ConsumerWidget {
     if (!context.mounted) return;
     showMessage(
       context,
-      added ? 'Added to Quick Settings.' : 'Pull down the shade and edit the tiles.',
+      added
+          ? 'Added to Quick Settings.'
+          : 'Pull down the shade and edit the tiles.',
       isError: !added,
     );
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final entitled = ref.watch(userProfileProvider).value?.access.entitled ?? false;
-    final reconnect = (ref.watch(killSwitchControllerProvider).value ?? false) && entitled;
-
     return SettingsGroup(
       title: 'Connection',
       children: [
         SettingsTile(
           label: 'Kill switch',
-          description: entitled
-              ? (reconnect ? 'On — rebuilds the tunnel if it drops.' : 'Off.')
-              : 'Subscribe to rebuild a dropped tunnel.',
-          control: entitled ? null : const _LockedChip(),
-          onTap: () => context.go(entitled ? AppRoutes.killSwitch : AppRoutes.paywall),
+          description: 'Always on — rebuilds the tunnel if it drops.',
+          onTap: () => context.go(AppRoutes.killSwitch),
         ),
         SettingsTile(
           label: 'Quick Settings tile',
@@ -321,18 +332,31 @@ class _IdentityCard extends StatelessWidget {
                   backgroundColor: theme.colorScheme.primaryContainer,
                   child: Text(
                     profile.email.characters.first.toUpperCase(),
-                    style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
+                    style: TextStyle(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
                   ),
                 ),
                 Gap.md,
                 Expanded(
-                  child: Text(profile.email, style: theme.textTheme.titleMedium),
+                  child: Text(
+                    profile.email,
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
               ],
             ),
             Gap.md,
-            DetailRow(label: 'User ID', value: profile.id, monospace: true, copyable: true),
-            DetailRow(label: 'Member since', value: Format.date(profile.createdAt)),
+            DetailRow(
+              label: 'User ID',
+              value: profile.id,
+              monospace: true,
+              copyable: true,
+            ),
+            DetailRow(
+              label: 'Member since',
+              value: Format.date(profile.createdAt),
+            ),
           ],
         ),
       ),

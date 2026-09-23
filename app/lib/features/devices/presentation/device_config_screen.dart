@@ -9,7 +9,7 @@ import '../../../core/widgets/detail_row.dart';
 import '../../tunnel/presentation/widgets/tunnel_card.dart';
 import '../domain/device.dart';
 import '../domain/device_config.dart';
-import 'devices_providers.dart';
+import 'controller/devices_providers.dart';
 
 /// The full peer config returned by `POST /devices`, shown once.
 ///
@@ -18,7 +18,11 @@ import 'devices_providers.dart';
 /// server's half only in the rendered `wg-quick` file — the two never meet in a
 /// request.
 class DeviceConfigScreen extends ConsumerWidget {
-  const DeviceConfigScreen({super.key, required this.config, this.isNew = false});
+  const DeviceConfigScreen({
+    super.key,
+    required this.config,
+    this.isNew = false,
+  });
 
   final DeviceConfig config;
 
@@ -41,7 +45,9 @@ class DeviceConfigScreen extends ConsumerWidget {
                 : () async {
                     await Clipboard.setData(
                       ClipboardData(
-                        text: config.toWgQuick(privateKey: privateKey.requireValue!),
+                        text: config.toWgQuick(
+                          privateKey: privateKey.requireValue!,
+                        ),
                       ),
                     );
                     if (context.mounted) {
@@ -68,10 +74,18 @@ class DeviceConfigScreen extends ConsumerWidget {
                 label: 'Platform',
                 value: DevicePlatform.labelFor(config.platform),
               ),
-              DetailRow(label: 'Address', value: config.tunnelIp, monospace: true, copyable: true),
+              DetailRow(
+                label: 'Address',
+                value: config.tunnelIp,
+                monospace: true,
+                copyable: true,
+              ),
               DetailRow(label: 'DNS', value: config.dns, monospace: true),
               DetailRow(label: 'MTU', value: '${config.mtu}'),
-              DetailRow(label: 'Issued', value: Format.dateTime(config.createdAt)),
+              DetailRow(
+                label: 'Issued',
+                value: Format.dateTime(config.createdAt),
+              ),
               _PrivateKeyRow(privateKey: privateKey),
             ],
           ),
@@ -92,7 +106,11 @@ class DeviceConfigScreen extends ConsumerWidget {
                 monospace: true,
                 copyable: true,
               ),
-              DetailRow(label: 'Allowed IPs', value: config.peer.allowedIps, monospace: true),
+              DetailRow(
+                label: 'Allowed IPs',
+                value: config.peer.allowedIps,
+                monospace: true,
+              ),
               DetailRow(
                 label: 'Keepalive',
                 value: '${config.peer.persistentKeepalive}s',
@@ -101,7 +119,9 @@ class DeviceConfigScreen extends ConsumerWidget {
           ),
           Gap.md,
           if (privateKey.value != null)
-            _WgQuickBlock(text: config.toWgQuick(privateKey: privateKey.requireValue!))
+            _WgQuickBlock(
+              text: config.toWgQuick(privateKey: privateKey.requireValue!),
+            )
           else
             Card(
               child: Padding(
@@ -135,7 +155,10 @@ class _IssuedBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.vpn_key_outlined, color: theme.colorScheme.onPrimaryContainer),
+          Icon(
+            Icons.vpn_key_outlined,
+            color: theme.colorScheme.onPrimaryContainer,
+          ),
           Gap.md,
           Expanded(
             child: Text(
@@ -192,7 +215,11 @@ class _PrivateKeyRowState extends State<_PrivateKeyRow> {
           iconSize: 18.r,
           tooltip: _revealed ? 'Hide' : 'Reveal',
           onPressed: () => setState(() => _revealed = !_revealed),
-          icon: Icon(_revealed ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+          icon: Icon(
+            _revealed
+                ? Icons.visibility_off_outlined
+                : Icons.visibility_outlined,
+          ),
         ),
       ],
     );
@@ -216,7 +243,10 @@ class _WgQuickBlock extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('wg-quick config', style: theme.textTheme.titleSmall),
+                  child: Text(
+                    'wg-quick config',
+                    style: theme.textTheme.titleSmall,
+                  ),
                 ),
                 TextButton.icon(
                   onPressed: () async {
@@ -234,7 +264,9 @@ class _WgQuickBlock extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: SelectableText(
                 text,
-                style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
           ],
@@ -245,7 +277,11 @@ class _WgQuickBlock extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.subtitle, required this.children});
+  const _Section({
+    required this.title,
+    required this.subtitle,
+    required this.children,
+  });
 
   final String title;
   final String subtitle;

@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/failure_log.dart';
-import '../../tunnel/data/tunnel_channel.dart';
-import '../data/kill_switch_store.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../../tunnel/data/tunnel_channel.dart';
+import '../../data/kill_switch_store.dart';
 
 part 'kill_switch_controller.g.dart';
 

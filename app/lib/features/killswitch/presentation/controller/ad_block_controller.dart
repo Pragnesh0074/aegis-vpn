@@ -2,10 +2,10 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/failure_log.dart';
-import '../../profile/data/profile_repository.dart';
-import '../../profile/presentation/profile_providers.dart';
-import '../../tunnel/presentation/vpn_session.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../../profile/data/profile_repository.dart';
+import '../../../profile/presentation/controller/profile_providers.dart';
+import '../../../tunnel/presentation/controller/vpn_session.dart';
 
 part 'ad_block_controller.g.dart';
 
@@ -38,8 +38,9 @@ class AdBlockController extends _$AdBlockController {
     state = AsyncData(enabled);
 
     try {
-      final profile =
-          await ref.read(profileRepositoryProvider).setAdBlockEnabled(enabled);
+      final profile = await ref
+          .read(profileRepositoryProvider)
+          .setAdBlockEnabled(enabled);
 
       // The server decides. If a plan refused the change, this snaps the switch
       // back to the truth rather than leaving it where the user put it.

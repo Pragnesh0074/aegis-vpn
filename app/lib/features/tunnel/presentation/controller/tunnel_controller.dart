@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../core/error/failure_log.dart';
-import '../../devices/data/device_key_store.dart';
-import '../../splittunnel/data/excluded_apps_store.dart';
-import '../data/tunnel_channel.dart';
-import '../data/tunnel_config_store.dart';
-import '../domain/tunnel_status.dart';
+import '../../../../core/error/failure_log.dart';
+import '../../../devices/data/device_key_store.dart';
+import '../../../splittunnel/data/excluded_apps_store.dart';
+import '../../data/tunnel_channel.dart';
+import '../../data/tunnel_config_store.dart';
+import '../../domain/tunnel_status.dart';
 
 part 'tunnel_controller.g.dart';
 
@@ -50,7 +50,9 @@ class TunnelController extends _$TunnelController {
       // whatever is on disk at this instant, not whatever a screen last drew.
       final excluded = await ref.read(excludedAppsStoreProvider).read();
 
-      await ref.read(tunnelChannelProvider).connect(
+      await ref
+          .read(tunnelChannelProvider)
+          .connect(
             config: config,
             privateKey: privateKey,
             excludedApps: excluded.toList(),
@@ -58,7 +60,8 @@ class TunnelController extends _$TunnelController {
       await ref.read(tunnelConfigStoreProvider).saveSelectedDeviceId(deviceId);
     });
 
-    if (result.hasError) logFailure('connect', result.error!, result.stackTrace!);
+    if (result.hasError)
+      logFailure('connect', result.error!, result.stackTrace!);
     state = result.hasError
         ? AsyncError(result.error!, result.stackTrace!)
         : const AsyncData(null);
@@ -73,7 +76,8 @@ class TunnelController extends _$TunnelController {
       await ref.read(tunnelChannelProvider).disconnect();
     });
 
-    if (result.hasError) logFailure('disconnect', result.error!, result.stackTrace!);
+    if (result.hasError)
+      logFailure('disconnect', result.error!, result.stackTrace!);
     state = result.hasError
         ? AsyncError(result.error!, result.stackTrace!)
         : const AsyncData(null);
@@ -83,10 +87,8 @@ class TunnelController extends _$TunnelController {
   /// Toggle used by the connect button, so the UI does not have to decide which
   /// direction it is going while a state change is in flight.
   Future<bool> toggle(String deviceId) {
-    final current = ref
-        .read(tunnelStatusStreamProvider)
-        .value
-        ?.state ??
+    final current =
+        ref.read(tunnelStatusStreamProvider).value?.state ??
         TunnelState.disconnected;
     return current.isUp ? disconnect() : connect(deviceId);
   }

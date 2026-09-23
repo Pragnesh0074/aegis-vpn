@@ -8,7 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/validators.dart';
 import '../../../core/widgets/async_view.dart';
 import '../../../core/widgets/detail_row.dart';
-import 'auth_controller.dart';
+import 'controller/auth_controller.dart';
 import 'widgets/auth_form_scaffold.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -32,10 +32,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    await ref.read(authControllerProvider.notifier).register(
-          email: _email.text,
-          password: _password.text,
-        );
+    await ref
+        .read(authControllerProvider.notifier)
+        .register(email: _email.text, password: _password.text);
   }
 
   @override
@@ -78,8 +77,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 'At least ${Validators.passwordMinLength} characters. '
                 'No other rules — length is what matters.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),

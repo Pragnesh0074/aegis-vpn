@@ -4,28 +4,28 @@ import 'package:aegis_vpn/features/auth/presentation/register_screen.dart';
 import 'package:aegis_vpn/features/devices/domain/device.dart';
 import 'package:aegis_vpn/features/history/domain/vpn_session_record.dart';
 import 'package:aegis_vpn/features/history/presentation/history_screen.dart';
-import 'package:aegis_vpn/features/history/presentation/session_recorder.dart';
+import 'package:aegis_vpn/features/history/presentation/controller/session_recorder.dart';
 import 'package:aegis_vpn/features/devices/domain/device_config.dart';
 import 'package:aegis_vpn/features/devices/presentation/device_config_screen.dart';
 import 'package:aegis_vpn/features/home/presentation/connect_screen.dart';
 import 'package:aegis_vpn/features/profile/domain/user_profile.dart';
-import 'package:aegis_vpn/features/profile/presentation/profile_providers.dart';
+import 'package:aegis_vpn/features/profile/presentation/controller/profile_providers.dart';
 import 'package:aegis_vpn/features/profile/presentation/profile_screen.dart';
 import 'package:aegis_vpn/features/profile/presentation/widgets/settings_tile.dart';
 import 'package:aegis_vpn/features/killswitch/presentation/kill_switch_screen.dart';
 import 'package:aegis_vpn/features/nodes/domain/vpn_node.dart';
 import 'package:aegis_vpn/features/nodes/presentation/locations_screen.dart';
-import 'package:aegis_vpn/features/nodes/presentation/nodes_providers.dart';
-import 'package:aegis_vpn/features/nodes/presentation/selected_node.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/nodes_providers.dart';
+import 'package:aegis_vpn/features/nodes/presentation/controller/selected_node.dart';
 import 'package:aegis_vpn/features/splittunnel/domain/installed_app.dart';
-import 'package:aegis_vpn/features/splittunnel/presentation/split_tunnel_controller.dart';
+import 'package:aegis_vpn/features/splittunnel/presentation/controller/split_tunnel_controller.dart';
 import 'package:aegis_vpn/features/splittunnel/presentation/split_tunnel_screen.dart';
 import 'package:aegis_vpn/features/tunnel/data/tunnel_channel.dart';
 import 'package:aegis_vpn/features/tunnel/domain/tunnel_status.dart';
-import 'package:aegis_vpn/features/tunnel/presentation/tunnel_metrics.dart';
+import 'package:aegis_vpn/features/tunnel/presentation/controller/tunnel_metrics.dart';
 import 'package:aegis_vpn/features/tunnel/presentation/widgets/connect_orb.dart';
 import 'package:aegis_vpn/features/whoami/domain/exit_check.dart';
-import 'package:aegis_vpn/features/whoami/presentation/exit_check_providers.dart';
+import 'package:aegis_vpn/features/whoami/presentation/controller/exit_check_providers.dart';
 import 'package:aegis_vpn/features/whoami/presentation/widgets/exit_check_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -101,31 +101,32 @@ void main() {
   final viaFrankfurt = ExitCheck(
     ip: '3.71.204.118',
     viaTunnel: true,
-    node: const ExitNode(id: 'n-fra', name: 'Frankfurt #1', region: 'de-frankfurt'),
+    node: const ExitNode(
+      id: 'n-fra',
+      name: 'Frankfurt #1',
+      region: 'de-frankfurt',
+    ),
     checkedAt: DateTime.utc(2026, 9, 15, 10),
   );
 
   /// What every screen test needs before it can draw: a fleet, a place to rank
   /// it from, and an answer from `/whoami`.
   List<Override> fleet({ExitCheck? seenAs}) => [
-        vpnNodesProvider.overrideWith((ref) async => nodes),
-        // Automatic ranks by the device's time zone, so a test that did not pin
-        // one would pick a different country on a machine set to UTC than on one
-        // in India. Placed in India, where the live fleet's users are.
-        deviceUtcOffsetProvider.overrideWithValue(
-          const Duration(hours: 5, minutes: 30),
-        ),
-        // There is no network here: without this the card would render its
-        // "could not check" state on every screen that carries it.
-        exitCheckProvider.overrideWith((ref) async => seenAs ?? unprotected),
-      ];
+    vpnNodesProvider.overrideWith((ref) async => nodes),
+    // Automatic ranks by the device's time zone, so a test that did not pin
+    // one would pick a different country on a machine set to UTC than on one
+    // in India. Placed in India, where the live fleet's users are.
+    deviceUtcOffsetProvider.overrideWithValue(
+      const Duration(hours: 5, minutes: 30),
+    ),
+    // There is no network here: without this the card would render its
+    // "could not check" state on every screen that carries it.
+    exitCheckProvider.overrideWith((ref) async => seenAs ?? unprotected),
+  ];
 
   // A small phone and a large one. An overflow on either fails the test, because
   // the test binding surfaces render errors as exceptions.
-  const sizes = {
-    'small phone': Size(320, 640),
-    'large phone': Size(430, 932),
-  };
+  const sizes = {'small phone': Size(320, 640), 'large phone': Size(430, 932)};
 
   for (final entry in sizes.entries) {
     group('at ${entry.key}', () {
@@ -136,14 +137,21 @@ void main() {
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('register screen renders with the password rule', (tester) async {
-        await pumpScreen(tester, const RegisterScreen(), surfaceSize: entry.value);
+      testWidgets('register screen renders with the password rule', (
+        tester,
+      ) async {
+        await pumpScreen(
+          tester,
+          const RegisterScreen(),
+          surfaceSize: entry.value,
+        );
         expect(find.textContaining('At least 10 characters'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('connect screen offers one button and no way to add a device',
-          (tester) async {
+      testWidgets('connect screen offers one button and no way to add a device', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           const ConnectScreen(),
@@ -186,8 +194,9 @@ void main() {
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('locations screen lists countries with flags and load',
-          (tester) async {
+      testWidgets('locations screen lists countries with flags and load', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           const LocationsScreen(),
@@ -217,7 +226,9 @@ void main() {
       // the platform status stream, which is the app's single source of truth
       // for whether traffic is being carried.
       for (final scenario in _liveStates) {
-        testWidgets('connect screen renders while ${scenario.name}', (tester) async {
+        testWidgets('connect screen renders while ${scenario.name}', (
+          tester,
+        ) async {
           await pumpScreen(
             tester,
             const ConnectScreen(),
@@ -245,7 +256,9 @@ void main() {
         });
       }
 
-      testWidgets('account page carries every setting, and its caveats', (tester) async {
+      testWidgets('account page carries every setting, and its caveats', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           const ProfileScreen(),
@@ -332,9 +345,7 @@ void main() {
         await pumpScreen(
           tester,
           const SplitTunnelScreen(),
-          overrides: [
-            installedAppsProvider.overrideWith((ref) async => _apps),
-          ],
+          overrides: [installedAppsProvider.overrideWith((ref) async => _apps)],
           surfaceSize: entry.value,
         );
         await tester.pumpAndSettle();
@@ -343,14 +354,19 @@ void main() {
         expect(find.text('Chat'), findsOneWidget);
         // Nothing ticked yet, so the screen says what the default actually is
         // rather than leaving "split tunnelling" to be guessed at.
-        expect(find.textContaining('Every app uses the tunnel'), findsOneWidget);
+        expect(
+          find.textContaining('Every app uses the tunnel'),
+          findsOneWidget,
+        );
         // A system app is labelled, not hidden — a carrier's own app is a
         // plausible thing to exclude.
         expect(find.textContaining('· system'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('history screen totals the sessions it lists', (tester) async {
+      testWidgets('history screen totals the sessions it lists', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           const HistoryScreen(),
@@ -365,11 +381,16 @@ void main() {
         expect(find.text('Mumbai #1'), findsOneWidget);
         expect(find.text('2'), findsOneWidget); // sessions
         // The promise that makes a usage log acceptable in a VPN app.
-        expect(find.textContaining('Nothing here is sent to the server'), findsOneWidget);
+        expect(
+          find.textContaining('Nothing here is sent to the server'),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       });
 
-      testWidgets('device config shows every field the API returned', (tester) async {
+      testWidgets('device config shows every field the API returned', (
+        tester,
+      ) async {
         await pumpScreen(
           tester,
           DeviceConfigScreen(config: config, isNew: true),
@@ -393,10 +414,10 @@ void main() {
         // The peer section starts below the fold on a small phone now that the
         // connect card is above it. Scroll rather than assert on whatever fits.
         Future<void> scrollTo(Finder finder) => tester.scrollUntilVisible(
-              finder,
-              200,
-              scrollable: find.byType(Scrollable).first,
-            );
+          finder,
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
 
         await scrollTo(find.text('203.0.113.10:51820'));
         expect(find.text('203.0.113.10:51820'), findsOneWidget);
@@ -411,14 +432,17 @@ void main() {
     });
   }
 
-  testWidgets('an interface that never handshakes stops claiming to be connecting',
-      (tester) async {
+  testWidgets('an interface that never handshakes stops claiming to be connecting', (
+    tester,
+  ) async {
     await pumpScreen(
       tester,
       const ConnectScreen(),
       overrides: [
         ...fleet(),
-        tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_noHandshakeYet)),
+        tunnelStatusStreamProvider.overrideWith(
+          (ref) => Stream.value(_noHandshakeYet),
+        ),
         // The uptime notifier times from wall clock, not from its own ticks, so
         // that it keeps counting while the app is backgrounded and its timer is
         // throttled. `pump` cannot advance that, so the elapsed time is supplied
@@ -445,14 +469,17 @@ void main() {
   // Pumped directly: the card is no longer mounted on the connect screen, but it
   // is still correct code and the behaviour is worth holding still until the
   // server-attested replacement lands.
-  testWidgets('the exit check names the country the server saw us from',
-      (tester) async {
+  testWidgets('the exit check names the country the server saw us from', (
+    tester,
+  ) async {
     await pumpScreen(
       tester,
       const ExitCheckCard(),
       overrides: [
         ...fleet(seenAs: viaFrankfurt),
-        tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
+        tunnelStatusStreamProvider.overrideWith(
+          (ref) => Stream.value(_handshaking),
+        ),
       ],
     );
     await tester.pump();
@@ -462,8 +489,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a tunnel that is up but not carrying the traffic is called out',
-      (tester) async {
+  testWidgets('a tunnel that is up but not carrying the traffic is called out', (
+    tester,
+  ) async {
     // The failure every other indicator on this screen would miss: the
     // interface is up, the peer is answering, and the request still reached the
     // API from the device's own address.
@@ -472,16 +500,18 @@ void main() {
       const ExitCheckCard(),
       overrides: [
         ...fleet(),
-        tunnelStatusStreamProvider.overrideWith((ref) => Stream.value(_handshaking)),
+        tunnelStatusStreamProvider.overrideWith(
+          (ref) => Stream.value(_handshaking),
+        ),
       ],
     );
     await tester.pump();
 
-    expect(find.text('Your traffic is not exiting through Aegis'), findsOneWidget);
     expect(
-      find.textContaining('not one of our servers'),
+      find.text('Your traffic is not exiting through Aegis'),
       findsOneWidget,
     );
+    expect(find.textContaining('not one of our servers'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -534,50 +564,54 @@ void main() {
   // rebuild, and the traffic only Android can block. If it ever stops saying so,
   // the app is implying it can do the second — which is the one claim a VPN must
   // never make falsely.
-  testWidgets('the kill switch screen separates what we do from what Android does',
-      (tester) async {
-    await pumpScreen(
-      tester,
-      const KillSwitchScreen(),
-      surfaceSize: const Size(430, 932),
-      overrides: [
-        userProfileProvider.overrideWith(
-          (ref) async => UserProfile(
-            id: 'u1',
-            email: 'someone@example.com',
-            createdAt: DateTime.utc(2026),
-            deviceCount: 1,
-            maxDevices: 5,
-            adBlockEnabled: true,
-            adBlockEntitled: true,
-            access: const AccessState(
-              entitled: true,
-              onTrial: true,
-              subscribed: false,
-              remaining: Duration(hours: 12),
+  testWidgets(
+    'the kill switch screen separates what we do from what Android does',
+    (tester) async {
+      await pumpScreen(
+        tester,
+        const KillSwitchScreen(),
+        surfaceSize: const Size(430, 932),
+        overrides: [
+          userProfileProvider.overrideWith(
+            (ref) async => UserProfile(
+              id: 'u1',
+              email: 'someone@example.com',
+              createdAt: DateTime.utc(2026),
+              deviceCount: 1,
+              maxDevices: 5,
+              adBlockEnabled: true,
+              adBlockEntitled: true,
+              access: const AccessState(
+                entitled: true,
+                onTrial: true,
+                subscribed: false,
+                remaining: Duration(hours: 12),
+              ),
             ),
           ),
-        ),
-      ],
-    );
-    await tester.pumpAndSettle();
+        ],
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Reconnect if it drops'), findsOneWidget);
-    expect(find.text('Block traffic while the VPN is off'), findsOneWidget);
-    expect(
-      find.textContaining('Android will not let an app'),
-      findsOneWidget,
-      reason: 'the limit has to be stated, not implied',
-    );
+      expect(find.text('Reconnect if it drops'), findsOneWidget);
+      expect(find.text('Block traffic while the VPN is off'), findsOneWidget);
+      expect(
+        find.textContaining('Android will not let an app'),
+        findsOneWidget,
+        reason: 'the limit has to be stated, not implied',
+      );
 
-    // The directions are useless without the way to act on them.
-    expect(find.text('Open Android VPN settings'), findsOneWidget);
-    expect(find.textContaining('Always-on VPN'), findsOneWidget);
+      // The directions are useless without the way to act on them.
+      expect(find.text('Open Android VPN settings'), findsOneWidget);
+      expect(find.textContaining('Always-on VPN'), findsOneWidget);
 
-    expect(tester.takeException(), isNull);
-  });
+      expect(tester.takeException(), isNull);
+    },
+  );
 
-  testWidgets('login form rejects a malformed email before any request', (tester) async {
+  testWidgets('login form rejects a malformed email before any request', (
+    tester,
+  ) async {
     await pumpScreen(tester, const LoginScreen());
 
     await tester.enterText(find.byType(TextFormField).first, 'not-an-email');
@@ -715,7 +749,11 @@ final _liveStates = [
 
 /// Two apps a picker has to draw: one ordinary, one shipped with the device.
 const _apps = [
-  InstalledApp(package: 'com.bank.example', label: 'Example Bank', isSystem: false),
+  InstalledApp(
+    package: 'com.bank.example',
+    label: 'Example Bank',
+    isSystem: false,
+  ),
   InstalledApp(package: 'com.android.chat', label: 'Chat', isSystem: true),
 ];
 
