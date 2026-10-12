@@ -63,5 +63,6 @@ These are load-bearing. Do not break them without updating the decisions log.
 
 - [`CHUNKS.md`](CHUNKS.md) — build plan and chunk rules
 - [`PROGRESS.md`](PROGRESS.md) — status, decisions log, follow-ups
+- [`docs/BRD.md`](docs/BRD.md) — business requirements, scope and launch gates
 - `backend/README.md` — API setup and local development
 - `docs/DEPLOY.md` — server provisioning runbook (chunk C9)
